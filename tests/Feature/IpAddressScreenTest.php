@@ -131,6 +131,7 @@ class IpAddressScreenTest extends TestCase
     public function yetkili_adres_ekler_ve_kayda_gecer(): void
     {
         $grup = $this->grup('Dış IPv4', GroupKind::Ipv4);
+        $this->adres($grup, '192.0.2.0/24');
 
         $this->actingAs($this->kullanici($grup, ['view', 'create']))
             ->post(route('ip-addresses.store'), $this->form($grup, '192.0.2.10'))
@@ -266,6 +267,7 @@ class IpAddressScreenTest extends TestCase
     {
         $kaynak = $this->grup('Grup A');
         $hedef = $this->grup('Grup B');
+        $this->adres($hedef, '192.0.2.0/24');
         $adres = $this->adres($kaynak, '192.0.2.10');
 
         $kullanici = $this->kullanici($kaynak, ['view', 'update', 'delete']);
@@ -282,6 +284,7 @@ class IpAddressScreenTest extends TestCase
     public function duzenleme_kendi_grubunda_ekleme_yetkisi_istemez(): void
     {
         $grup = $this->grup('Grup A');
+        $this->adres($grup, '192.0.2.0/24');
         $adres = $this->adres($grup, '192.0.2.10');
 
         $this->actingAs($this->kullanici($grup, ['view', 'update']))
@@ -328,5 +331,115 @@ class IpAddressScreenTest extends TestCase
         $this->actingAs(User::factory()->admin()->create())
             ->put(route('groups.update', $grup), ['name' => 'Karışık', 'kind' => GroupKind::LocalIpv4->value])
             ->assertSessionHasNoErrors();
+    }
+
+    /* ── IPv4 blok kuralı (Ipv4BlockRules) ── */
+
+    #[Test]
+    public function blok_olmadan_24ten_kucuk_eklenemez(): void
+    {
+        $grup = $this->grup('Dış IPv4', GroupKind::Ipv4);
+
+        $this->actingAs($this->kullanici($grup, ['view', 'create']))
+            ->post(route('ip-addresses.store'), $this->form($grup, '192.0.2.8/29'))
+            ->assertSessionHasErrors(['address' => '/29 doğrudan eklenemez; önce bu adresi içeren /24 (ya da daha geniş) bloğu aynı gruba ekleyin.']);
+
+        $this->assertDatabaseMissing('ip_addresses', ['address' => '192.0.2.8']);
+    }
+
+    #[Test]
+    public function blok_24_ve_genisi_dogrudan_eklenir(): void
+    {
+        $grup = $this->grup('Dış IPv4', GroupKind::Ipv4);
+        $kullanici = $this->kullanici($grup, ['view', 'create']);
+
+        foreach (['192.0.2.0/24', '198.51.100.0/22'] as $blok) {
+            $this->actingAs($kullanici)
+                ->post(route('ip-addresses.store'), $this->form($grup, $blok, ['name' => $blok]))
+                ->assertSessionHasNoErrors();
+        }
+
+        $this->assertSame(2, $grup->ipAddresses()->count());
+    }
+
+    /** Başka gruptaki blok bu grubun adresine kapı açmaz. */
+    #[Test]
+    public function baska_gruptaki_blok_sayilmaz(): void
+    {
+        $grup = $this->grup('Grup A');
+        $this->adres($this->grup('Grup B'), '192.0.2.0/24');
+
+        $this->actingAs($this->kullanici($grup, ['view', 'create']))
+            ->post(route('ip-addresses.store'), $this->form($grup, '192.0.2.10'))
+            ->assertSessionHasErrors('address');
+    }
+
+    #[Test]
+    public function ipv6_blok_kuralina_girmez(): void
+    {
+        $grup = $this->grup('V6', GroupKind::Ipv6);
+
+        $this->actingAs($this->kullanici($grup, ['view', 'create']))
+            ->post(route('ip-addresses.store'), $this->form($grup, '2001:db8::10'))
+            ->assertSessionHasNoErrors();
+    }
+
+    #[Test]
+    public function icinde_kayit_olan_blok_silinemez(): void
+    {
+        $grup = $this->grup('Grup A');
+        $blok = $this->adres($grup, '192.0.2.0/24');
+        $this->adres($grup, '192.0.2.10');
+
+        $this->actingAs($this->kullanici($grup, ['view', 'delete']))
+            ->delete(route('ip-addresses.destroy', $blok), ['reason' => 'deneme'])
+            ->assertSessionHas('error', 'Bu blokta 1 kayıt var; blok kalkarsa onlar bloksuz kalır. Önce onları silin ya da taşıyın.');
+
+        $this->assertModelExists($blok);
+    }
+
+    /** İçerideki kaydı başka bir blok da kapsıyorsa bloksuz kalmaz; silinir. */
+    #[Test]
+    public function kayitlari_baska_blokta_kalan_blok_silinir(): void
+    {
+        $grup = $this->grup('Grup A');
+        $this->adres($grup, '192.0.2.0/23');
+        $blok = $this->adres($grup, '192.0.2.0/24');
+        $this->adres($grup, '192.0.2.10');
+
+        $this->actingAs($this->kullanici($grup, ['view', 'delete']))
+            ->delete(route('ip-addresses.destroy', $blok), ['reason' => 'deneme'])
+            ->assertSessionHasNoErrors();
+
+        $this->assertModelMissing($blok);
+    }
+
+    /** Düzenleme ikinci yoldur: bloğu kayıtlarını dışarıda bırakacak yere taşımak da kapalı. */
+    #[Test]
+    public function icinde_kayit_olan_blok_baska_yere_tasinamaz(): void
+    {
+        $grup = $this->grup('Grup A');
+        $blok = $this->adres($grup, '192.0.2.0/24');
+        $this->adres($grup, '192.0.2.10');
+
+        $this->actingAs($this->kullanici($grup, ['view', 'update']))
+            ->put(route('ip-addresses.update', $blok), $this->form($grup, '198.51.100.0/24'))
+            ->assertSessionHasErrors('address');
+
+        $this->assertSame('192.0.2.0', $blok->fresh()->address);
+    }
+
+    #[Test]
+    public function blok_adi_degisebilir(): void
+    {
+        $grup = $this->grup('Grup A');
+        $blok = $this->adres($grup, '192.0.2.0/24');
+        $this->adres($grup, '192.0.2.10');
+
+        $this->actingAs($this->kullanici($grup, ['view', 'update']))
+            ->put(route('ip-addresses.update', $blok), $this->form($grup, '192.0.2.0/24', ['name' => 'yeni-ad']))
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame('yeni-ad', $blok->fresh()->name);
     }
 }

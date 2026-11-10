@@ -32,6 +32,7 @@ async function girisYap(page) {
 
 const SAYFALAR = [
     ['IP adresleri', '/addresses'],
+    ['blok planı', '/addresses/plan'],
     ['gruplar', '/panel/groups'],
     ['kullanıcılar', '/panel/users'],
     ['kayıtlar', '/panel/logs'],

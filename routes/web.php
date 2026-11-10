@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Http\Controllers\Account\ProfileController;
 use App\Http\Controllers\ActivityLogController;
 use App\Http\Controllers\AddressGroupController;
+use App\Http\Controllers\AddressPlanController;
 use App\Http\Controllers\ApiTokenController;
 use App\Http\Controllers\Auth\CenterLoginController;
 use App\Http\Controllers\Auth\LoginController;
@@ -75,6 +76,9 @@ Route::middleware('auth')->group(function (): void {
      * Ekleme ve düzenleme formunun AYRI SAYFASI YOKTUR: ikisi de liste
      * ekranının üstünde pencere olarak açılır (?pencere=ekle / ?pencere=duzenle).
      */
+    /* IPv4 blok planı: listenin ağaç görünümü, yalnız okur. Kaynaktan ÖNCE, "plan" bir adres sanılmasın. */
+    Route::get('addresses/plan', AddressPlanController::class)->name('ip-addresses.plan');
+
     Route::resource('addresses', IpAddressController::class)
         ->only(['index', 'store', 'update', 'destroy'])
         ->parameters(['addresses' => 'ipAddress'])

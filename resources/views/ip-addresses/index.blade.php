@@ -44,6 +44,8 @@
 
                 <span class="spacer"></span>
 
+                <a href="{{ route('ip-addresses.plan', ['grup' => $selectedGroup?->uuid]) }}" class="btn btn--sm">Blok planı</a>
+
                 @if ($canCreate)
                     <a href="{{ route('ip-addresses.index', ['grup' => $selectedGroup?->uuid, 'pencere' => 'ekle']) }}"
                        class="btn btn--primary btn--sm" data-modal-open="record-add">Yeni adres</a>
