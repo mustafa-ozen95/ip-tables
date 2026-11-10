@@ -63,19 +63,38 @@ class AddressPlanScreenTest extends TestCase
     }
 
     #[Test]
-    public function bloklar_agac_olarak_cizilir(): void
+    public function bloklar_kapali_listelenir_parcalar_tabloda(): void
     {
         $grup = $this->grup('Grup A');
         $this->adres($grup, '198.51.100.0/24', 'musteri-a');
-        $this->adres($grup, '198.51.102.0/24', 'musteri-b');
-        $this->adres($grup, '198.51.102.8/30', 'baglanti-x');
+        $blok = $this->adres($grup, '198.51.102.0/24', 'musteri-b');
+        $this->adres($grup, '198.51.102.0/25', 'baglanti-x');
+        $this->adres($grup, '198.51.102.128/25');
 
         $this->actingAs($this->izleyici($grup))
             ->get(route('ip-addresses.plan', ['grup' => $grup->uuid]))
             ->assertOk()
-            ->assertSeeInOrder(['198.51.100.0/22', '198.51.100.0/23', '198.51.100.0/24', 'musteri-a', 'Boş', '198.51.101.0/24', 'Kayıtsız'])
-            ->assertSee('198.51.102.8/30')
-            ->assertSee('baglanti-x');
+            ->assertDontSee('/22')
+            ->assertSeeInOrder(['198.51.100.0/24', 'musteri-a', 'Bölünmedi', 'Boş', '198.51.102.0/24', 'musteri-b', '2 parça', '%50 dolu'])
+            ->assertSeeInOrder(['198.51.102.0/25', '198.51.102.1', '198.51.102.2', '198.51.102.126', '255.255.255.128', 'baglanti-x', 'Dolu'])
+            ->assertSee('<details class="block-node" >', false);
+
+        /* Bölmeden dönüşte o blok açık gelir. */
+        $this->actingAs($this->izleyici($grup))
+            ->get(route('ip-addresses.plan', ['grup' => $grup->uuid, 'blok' => $blok->uuid]))
+            ->assertSee('<details class="block-node"  open >', false);
+    }
+
+    #[Test]
+    public function bloga_bagli_olmayan_kayit_ayri_listede(): void
+    {
+        $grup = $this->grup('Grup A');
+        $this->adres($grup, '203.0.113.5', 'eski-sunucu');
+
+        $this->actingAs($this->izleyici($grup))
+            ->get(route('ip-addresses.plan', ['grup' => $grup->uuid]))
+            ->assertOk()
+            ->assertSeeInOrder(['Bloğa bağlı olmayan kayıtlar', '203.0.113.5', 'eski-sunucu']);
     }
 
     #[Test]
@@ -84,14 +103,14 @@ class AddressPlanScreenTest extends TestCase
         $acik = $this->grup('Grup A');
         $kapali = $this->grup('Grup B');
         $this->adres($acik, '198.51.100.0/24', 'gorunen-sunucu');
-        $this->adres($kapali, '203.0.113.5', 'gizli-sunucu');
+        $this->adres($kapali, '203.0.113.0/24', 'gizli-sunucu');
 
         $this->actingAs($this->izleyici($acik))
             ->get(route('ip-addresses.plan'))
             ->assertOk()
             ->assertSee('gorunen-sunucu')
             ->assertDontSee('gizli-sunucu')
-            ->assertDontSee('203.0.112.0/22')
+            ->assertDontSee('203.0.113.0/24')
             ->assertDontSee('Grup B');
     }
 
@@ -101,13 +120,43 @@ class AddressPlanScreenTest extends TestCase
     {
         $acik = $this->grup('Grup A');
         $kapali = $this->grup('Grup B');
-        $this->adres($kapali, '203.0.113.5', 'gizli-sunucu');
+        $this->adres($kapali, '203.0.113.0/24', 'gizli-sunucu');
 
         $this->actingAs($this->izleyici($acik))
             ->get(route('ip-addresses.plan', ['grup' => $kapali->uuid]))
             ->assertOk()
             ->assertDontSee('gizli-sunucu')
-            ->assertDontSee('203.0.113.5');
+            ->assertDontSee('203.0.113.0/24');
+    }
+
+    /** Böl düğmesi ve penceresi yalnız bölebilene; izleyici adresi elle yazsa da pencere açılmaz. */
+    #[Test]
+    public function bol_penceresi_yalniz_yetkiliye(): void
+    {
+        $grup = $this->grup('Grup A');
+        $blok = $this->adres($grup, '198.51.100.0/24');
+        $pencere = route('ip-addresses.plan', ['grup' => $grup->uuid, 'pencere' => 'bol', 'blok' => $blok->uuid]);
+
+        $this->actingAs($this->izleyici($grup))
+            ->get($pencere)
+            ->assertOk()
+            ->assertDontSee('>Böl</a>', false)
+            ->assertDontSee(route('ip-addresses.split', $blok), false);
+
+        $bolen = $this->izleyici($grup);
+        foreach (['update', 'create'] as $aksiyon) {
+            UserPermission::create([
+                'user_id' => $bolen->id, 'resource' => IpAddressPolicy::RESOURCE, 'resource_id' => $grup->id,
+                'action' => $aksiyon, 'effect' => PermissionEffect::Allow,
+            ]);
+        }
+
+        $this->actingAs($bolen)
+            ->get($pencere)
+            ->assertOk()
+            ->assertSee('>Böl</a>', false)
+            ->assertSee(route('ip-addresses.split', $blok), false)
+            ->assertSee('198.51.100.0/24 bölünecek');
     }
 
     #[Test]

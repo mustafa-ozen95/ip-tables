@@ -43,7 +43,7 @@
             @endif
 
             <x-form.field name="address" label="Adres"
-                          hint="Blok (192.0.2.0/24) ya da tek adres (192.0.2.10, 2001:db8::1). IPv4’te /24’ten küçüğü yalnız kayıtlı bir bloğun içine eklenir.">
+                          hint="IPv4’te yalnız /24 blok (192.0.2.0/24); küçük parçalar Blok planı’nda blok bölünerek açılır. IPv6’da tek adres ya da blok (2001:db8::1).">
                 <x-form.input name="address" :value="$record?->notation" mono required maxlength="64"
                               spellcheck="false" />
             </x-form.field>

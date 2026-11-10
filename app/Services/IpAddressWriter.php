@@ -8,6 +8,7 @@ use App\Enums\ActivityAction;
 use App\Models\AddressGroup;
 use App\Models\IpAddress;
 use App\Models\SubGroup;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -50,6 +51,41 @@ class IpAddressWriter
             $this->activity->record(ActivityAction::Deleted, "Adres silindi: {$this->describe($ipAddress)}", $ipAddress, $reason);
 
             $ipAddress->delete();
+        });
+    }
+
+    /**
+     * Bloğu parçalara böler (bkz. Ipv4BlockRules). Parçalar bloğun grubunda
+     * ve alt grubunda, adsız açılır; atama sonra adlarından yapılır. Kayda
+     * parça başına değil bölme başına TEK satır düşer.
+     *
+     * @param  list<ParsedAddress>  $parts
+     */
+    public function split(IpAddress $block, array $parts, string $layout): void
+    {
+        DB::transaction(function () use ($block, $parts, $layout): void {
+            foreach ($parts as $parsed) {
+                $this->fill(new IpAddress, [
+                    'group' => $block->group,
+                    'subGroup' => $block->subGroup,
+                    'parsed' => $parsed,
+                    'details' => ['name' => null, 'description' => null],
+                ])->save();
+            }
+
+            $this->activity->record(ActivityAction::Updated, 'Blok bölündü: '.$this->describe($block)
+                .' → '.count($parts)." parça ({$layout})", $block);
+        });
+    }
+
+    /** @param  Collection<int, IpAddress>  $parts */
+    public function unsplit(IpAddress $block, Collection $parts, string $reason): void
+    {
+        DB::transaction(function () use ($block, $parts, $reason): void {
+            $this->activity->record(ActivityAction::Deleted, 'Blok bölmesi kaldırıldı: '.$this->describe($block)
+                .' · '.$parts->count().' parça silindi', $block, $reason);
+
+            IpAddress::query()->whereKey($parts->modelKeys())->delete();
         });
     }
 

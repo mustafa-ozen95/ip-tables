@@ -153,7 +153,8 @@ class StoreIpAddressRequest extends FormRequest
             ! $this->group->kind->accepts($this->parsed->kind) => "{$this->parsed->notation()} bir {$this->parsed->kind->label()} adresi; "
                 ."{$this->group->name} grubu yalnız {$this->group->kind->label()} kabul ediyor.",
             $this->isDuplicate() => "{$this->parsed->notation()} {$this->group->name} grubunda zaten kayıtlı.",
-            default => $this->blockError(),
+            /* IPv4'te yalnız /24 eklenir; parça ve bölünmüş blok yerinde kalır (bkz. Ipv4BlockRules). */
+            default => app(Ipv4BlockRules::class)->writeError($this->record(), $this->group, $this->parsed),
         };
 
         if ($error !== null) {
@@ -161,25 +162,6 @@ class StoreIpAddressRequest extends FormRequest
         }
 
         return $error === null;
-    }
-
-    /**
-     * IPv4 blok kuralı (bkz. Ipv4BlockRules): /24'ten küçük kayıt bir bloğun
-     * içine girer; içinde kayıt olan blok, onları bloksuz bırakacak yere
-     * taşınamaz.
-     */
-    private function blockError(): ?string
-    {
-        $rules = app(Ipv4BlockRules::class);
-        [$address, $prefix] = [$this->parsed->address, $this->parsed->prefix];
-
-        if ($rules->needsParent($address, $prefix) && ! $rules->hasParent($this->group, $address, $prefix, $this->record())) {
-            return $rules->message($prefix);
-        }
-
-        $orphans = $this->record() === null ? 0 : $rules->orphans($this->record(), $this->group, $address, $prefix);
-
-        return $orphans > 0 ? $rules->orphanMessage($orphans) : null;
     }
 
     private function isDuplicate(): bool

@@ -15,7 +15,7 @@ use Illuminate\Validation\Validator;
  * Silme geri alınamaz: gerekçe zorunludur ve etkinlik kaydına yazılır.
  * Onay penceresi alanı ekler; pencereyi atlayan istek burada durur.
  *
- * İçinde kayıt olan IPv4 bloğu silinmez: onları bloksuz bırakırdı
+ * Bölünmüş blok ve bloğun parçası tek başına silinmez: bölme bozulurdu
  * (bkz. Ipv4BlockRules; düzenlemedeki taşıma da aynı kuralla sınanır).
  */
 class DestroyIpAddressRequest extends FormRequest
@@ -35,11 +35,10 @@ class DestroyIpAddressRequest extends FormRequest
     public function after(): array
     {
         return [function (Validator $validator): void {
-            $rules = app(Ipv4BlockRules::class);
-            $orphans = $rules->orphans($this->route('ipAddress'));
+            $error = app(Ipv4BlockRules::class)->deleteError($this->route('ipAddress'));
 
-            if ($orphans > 0) {
-                $validator->errors()->add('address', $rules->orphanMessage($orphans));
+            if ($error !== null) {
+                $validator->errors()->add('address', $error);
             }
         }];
     }

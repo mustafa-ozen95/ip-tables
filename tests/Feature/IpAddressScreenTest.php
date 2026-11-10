@@ -131,14 +131,13 @@ class IpAddressScreenTest extends TestCase
     public function yetkili_adres_ekler_ve_kayda_gecer(): void
     {
         $grup = $this->grup('Dış IPv4', GroupKind::Ipv4);
-        $this->adres($grup, '192.0.2.0/24');
 
         $this->actingAs($this->kullanici($grup, ['view', 'create']))
-            ->post(route('ip-addresses.store'), $this->form($grup, '192.0.2.10'))
+            ->post(route('ip-addresses.store'), $this->form($grup, '192.0.2.0/24'))
             ->assertRedirect()
             ->assertSessionHasNoErrors();
 
-        $this->assertDatabaseHas('ip_addresses', ['address' => '192.0.2.10', 'prefix' => 32, 'name' => 'web-01']);
+        $this->assertDatabaseHas('ip_addresses', ['address' => '192.0.2.0', 'prefix' => 24, 'name' => 'web-01']);
         $this->assertDatabaseHas('activity_logs', ['action' => 'created']);
     }
 
@@ -267,14 +266,13 @@ class IpAddressScreenTest extends TestCase
     {
         $kaynak = $this->grup('Grup A');
         $hedef = $this->grup('Grup B');
-        $this->adres($hedef, '192.0.2.0/24');
-        $adres = $this->adres($kaynak, '192.0.2.10');
+        $adres = $this->adres($kaynak, '192.0.2.0/24');
 
         $kullanici = $this->kullanici($kaynak, ['view', 'update', 'delete']);
         $this->kullanici($hedef, ['view', 'create'], $kullanici);
 
         $this->actingAs($kullanici)
-            ->put(route('ip-addresses.update', $adres), $this->form($hedef, '192.0.2.10'))
+            ->put(route('ip-addresses.update', $adres), $this->form($hedef, '192.0.2.0/24'))
             ->assertSessionHasNoErrors();
 
         $this->assertTrue($adres->fresh()->group->is($hedef));
@@ -284,14 +282,13 @@ class IpAddressScreenTest extends TestCase
     public function duzenleme_kendi_grubunda_ekleme_yetkisi_istemez(): void
     {
         $grup = $this->grup('Grup A');
-        $this->adres($grup, '192.0.2.0/24');
-        $adres = $this->adres($grup, '192.0.2.10');
+        $adres = $this->adres($grup, '192.0.2.0/24');
 
         $this->actingAs($this->kullanici($grup, ['view', 'update']))
-            ->put(route('ip-addresses.update', $adres), $this->form($grup, '192.0.2.11', ['name' => 'web-02']))
+            ->put(route('ip-addresses.update', $adres), $this->form($grup, '198.51.100.0/24', ['name' => 'web-02']))
             ->assertSessionHasNoErrors();
 
-        $this->assertSame(['192.0.2.11', 'web-02'], [$adres->fresh()->address, $adres->fresh()->name]);
+        $this->assertSame(['198.51.100.0', 'web-02'], [$adres->fresh()->address, $adres->fresh()->name]);
     }
 
     #[Test]
@@ -335,43 +332,40 @@ class IpAddressScreenTest extends TestCase
 
     /* ── IPv4 blok kuralı (Ipv4BlockRules) ── */
 
-    #[Test]
-    public function blok_olmadan_24ten_kucuk_eklenemez(): void
+    private function bol(AddressGroup $grup, IpAddress $blok, string $duzen): void
     {
-        $grup = $this->grup('Dış IPv4', GroupKind::Ipv4);
-
-        $this->actingAs($this->kullanici($grup, ['view', 'create']))
-            ->post(route('ip-addresses.store'), $this->form($grup, '192.0.2.8/29'))
-            ->assertSessionHasErrors(['address' => '/29 doğrudan eklenemez; önce bu adresi içeren /24 (ya da daha geniş) bloğu aynı gruba ekleyin.']);
-
-        $this->assertDatabaseMissing('ip_addresses', ['address' => '192.0.2.8']);
+        $this->actingAs($this->kullanici($grup, ['view', 'update', 'create']))
+            ->post(route('ip-addresses.split', $blok), ['layout' => $duzen])
+            ->assertSessionHasNoErrors();
     }
 
     #[Test]
-    public function blok_24_ve_genisi_dogrudan_eklenir(): void
+    public function ipv4te_yalniz_24_eklenir(): void
     {
         $grup = $this->grup('Dış IPv4', GroupKind::Ipv4);
         $kullanici = $this->kullanici($grup, ['view', 'create']);
 
-        foreach (['192.0.2.0/24', '198.51.100.0/22'] as $blok) {
+        foreach (['192.0.2.8/29', '192.0.2.10', '198.51.100.0/22'] as $girdi) {
             $this->actingAs($kullanici)
-                ->post(route('ip-addresses.store'), $this->form($grup, $blok, ['name' => $blok]))
-                ->assertSessionHasNoErrors();
+                ->post(route('ip-addresses.store'), $this->form($grup, $girdi))
+                ->assertSessionHasErrors(['address' => 'IPv4’te yalnız /24 blok eklenir; küçük parçalar Blok planı’nda blok bölünerek açılır.']);
         }
 
-        $this->assertSame(2, $grup->ipAddresses()->count());
+        $this->assertDatabaseCount('ip_addresses', 0);
     }
 
-    /** Başka gruptaki blok bu grubun adresine kapı açmaz. */
+    /** Bölünmüş bloğun içine elle parça da eklenemez; parçalar yalnız bölmeden gelir. */
     #[Test]
-    public function baska_gruptaki_blok_sayilmaz(): void
+    public function bolunmus_bloga_elle_parca_eklenemez(): void
     {
         $grup = $this->grup('Grup A');
-        $this->adres($this->grup('Grup B'), '192.0.2.0/24');
+        $this->bol($grup, $this->adres($grup, '192.0.2.0/24'), '25x2');
 
         $this->actingAs($this->kullanici($grup, ['view', 'create']))
             ->post(route('ip-addresses.store'), $this->form($grup, '192.0.2.10'))
             ->assertSessionHasErrors('address');
+
+        $this->assertSame(3, $grup->ipAddresses()->count());
     }
 
     #[Test]
@@ -384,62 +378,89 @@ class IpAddressScreenTest extends TestCase
             ->assertSessionHasNoErrors();
     }
 
+    /** Kuraldan önce girilmiş /32 silinmez, adı değişebilir; yeri ancak /24'e çevrilerek değişir. */
     #[Test]
-    public function icinde_kayit_olan_blok_silinemez(): void
+    public function kuraldan_once_girilmis_kayit_adini_degistirir(): void
+    {
+        $grup = $this->grup('Grup A');
+        $eski = $this->adres($grup, '192.0.2.10');
+        $kullanici = $this->kullanici($grup, ['view', 'update']);
+
+        $this->actingAs($kullanici)
+            ->put(route('ip-addresses.update', $eski), $this->form($grup, '192.0.2.10', ['name' => 'yeni-ad']))
+            ->assertSessionHasNoErrors();
+
+        $this->actingAs($kullanici)
+            ->put(route('ip-addresses.update', $eski), $this->form($grup, '192.0.2.11'))
+            ->assertSessionHasErrors('address');
+
+        $this->assertSame(['192.0.2.10', 'yeni-ad'], [$eski->fresh()->address, $eski->fresh()->name]);
+    }
+
+    #[Test]
+    public function bolunmus_blok_silinemez(): void
     {
         $grup = $this->grup('Grup A');
         $blok = $this->adres($grup, '192.0.2.0/24');
-        $this->adres($grup, '192.0.2.10');
+        $this->bol($grup, $blok, '25x2');
 
         $this->actingAs($this->kullanici($grup, ['view', 'delete']))
             ->delete(route('ip-addresses.destroy', $blok), ['reason' => 'deneme'])
-            ->assertSessionHas('error', 'Bu blokta 1 kayıt var; blok kalkarsa onlar bloksuz kalır. Önce onları silin ya da taşıyın.');
+            ->assertSessionHas('error', 'Bu blok 2 parçaya bölünmüş; önce bölmesini kaldırın.');
 
         $this->assertModelExists($blok);
     }
 
-    /** İçerideki kaydı başka bir blok da kapsıyorsa bloksuz kalmaz; silinir. */
     #[Test]
-    public function kayitlari_baska_blokta_kalan_blok_silinir(): void
+    public function parca_tek_basina_silinemez(): void
     {
         $grup = $this->grup('Grup A');
-        $this->adres($grup, '192.0.2.0/23');
-        $blok = $this->adres($grup, '192.0.2.0/24');
-        $this->adres($grup, '192.0.2.10');
+        $this->bol($grup, $this->adres($grup, '192.0.2.0/24'), '25x2');
+        $parca = $grup->ipAddresses()->where('prefix', 25)->firstOrFail();
 
         $this->actingAs($this->kullanici($grup, ['view', 'delete']))
-            ->delete(route('ip-addresses.destroy', $blok), ['reason' => 'deneme'])
-            ->assertSessionHasNoErrors();
+            ->delete(route('ip-addresses.destroy', $parca), ['reason' => 'deneme'])
+            ->assertSessionHas('error', 'Parça tek başına silinmez; boşaltmak için adını temizleyin ya da bloğun bölmesini kaldırın.');
 
-        $this->assertModelMissing($blok);
+        $this->assertModelExists($parca);
     }
 
-    /** Düzenleme ikinci yoldur: bloğu kayıtlarını dışarıda bırakacak yere taşımak da kapalı. */
+    /** Düzenleme ikinci yoldur: parçanın adresi de grubu da yerinde kalır, adı değişir. */
     #[Test]
-    public function icinde_kayit_olan_blok_baska_yere_tasinamaz(): void
+    public function parcanin_adi_degisir_adresi_degismez(): void
+    {
+        $grup = $this->grup('Grup A');
+        $this->bol($grup, $this->adres($grup, '192.0.2.0/24'), '25x2');
+        $parca = $grup->ipAddresses()->where('prefix', 25)->firstOrFail();
+        $kullanici = $this->kullanici($grup, ['view', 'update']);
+
+        $this->actingAs($kullanici)
+            ->put(route('ip-addresses.update', $parca), $this->form($grup, '192.0.2.0/25', ['name' => 'musteri-a']))
+            ->assertSessionHasNoErrors();
+
+        $this->actingAs($kullanici)
+            ->put(route('ip-addresses.update', $parca), $this->form($grup, '192.0.2.0/26'))
+            ->assertSessionHasErrors(['address' => 'Parçanın adresi ve grubu değişmez; gerekirse bloğun bölmesini kaldırıp yeniden bölün.']);
+
+        $this->assertSame([25, 'musteri-a'], [$parca->fresh()->prefix, $parca->fresh()->name]);
+    }
+
+    #[Test]
+    public function bolunmus_blok_baska_yere_tasinamaz(): void
     {
         $grup = $this->grup('Grup A');
         $blok = $this->adres($grup, '192.0.2.0/24');
-        $this->adres($grup, '192.0.2.10');
+        $this->bol($grup, $blok, '25x2');
+        $kullanici = $this->kullanici($grup, ['view', 'update']);
 
-        $this->actingAs($this->kullanici($grup, ['view', 'update']))
+        $this->actingAs($kullanici)
             ->put(route('ip-addresses.update', $blok), $this->form($grup, '198.51.100.0/24'))
             ->assertSessionHasErrors('address');
 
-        $this->assertSame('192.0.2.0', $blok->fresh()->address);
-    }
-
-    #[Test]
-    public function blok_adi_degisebilir(): void
-    {
-        $grup = $this->grup('Grup A');
-        $blok = $this->adres($grup, '192.0.2.0/24');
-        $this->adres($grup, '192.0.2.10');
-
-        $this->actingAs($this->kullanici($grup, ['view', 'update']))
+        $this->actingAs($kullanici)
             ->put(route('ip-addresses.update', $blok), $this->form($grup, '192.0.2.0/24', ['name' => 'yeni-ad']))
             ->assertSessionHasNoErrors();
 
-        $this->assertSame('yeni-ad', $blok->fresh()->name);
+        $this->assertSame(['192.0.2.0', 'yeni-ad'], [$blok->fresh()->address, $blok->fresh()->name]);
     }
 }

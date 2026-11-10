@@ -6,181 +6,158 @@ namespace App\Services;
 
 use App\Enums\BadgeVariant;
 use App\Models\IpAddress;
+use App\Support\Net\Cidr;
 use Illuminate\Support\Collection;
 
 /**
- * IPv4 blok planı: kayıtlar /22 köklerin altında, /32'ye kadar ikiye
- * bölünen bir ağaç olarak dizilir.
+ * IPv4 blok planı: kayıtlı /24 bloklar adres sırasıyla, her birinin
+ * altında bölmeden çıkan parçalar (bkz. Ipv4BlockRules). Parçalar tek
+ * kattır; plan bu yüzden iki düzeyden derine inmez.
  *
- * İKİ TÜR KAYIT VAR (bkz. Ipv4BlockRules): /24 ya da daha geniş kayıt
- * BLOKTUR, adres alanını tanımlar; /25–/32 kayıt bir bloğun içinden
- * yapılmış ATAMADIR. Doluluk, blok alanının ne kadarının atandığıdır.
- * Hiçbir bloğun kapsamadığı alan "kayıtsız"dır, boş değil.
+ * Doluluk ADI verilmiş parçalardır: bölme parçaları adsız açar, atama
+ * parçaya ad vererek yapılır. Bölünmemiş blok "Boş" sayılır.
  *
- * Her düğüm iki yarıya ayrılır. İçinde kayıt olmayan yarı yaprak kalır ve
- * daha fazla bölünmez: boş bir /25'in 128 adresini tek tek çizmek bilgi
- * değil gürültüdür. Ağaç yalnız kayıtlara giden yolları ve yollar boyunca
- * boşta kalan blokları gösterir.
- *
- * /22'den geniş bloklar (ör. bir /16) tek köke sığmaz; ayrı listede durur,
- * içine düşen kökler onların alanı sayılır. IPv6 bu plana girmez.
- *
- * Hizasız girilmiş blok (192.0.2.5/24) kendi ağ adresine (192.0.2.0/24)
- * oturtulur; kayıt değişmez, yalnız yeri hesaplanır.
+ * Hiçbir /24'e oturmayan IPv4 kayıtları (kuraldan önce girilmiş /32'ler,
+ * geniş bloklar) ayrı listede durur. IPv6 bu plana girmez.
  */
 class Ipv4BlockPlan
 {
-    public const ROOT_PREFIX = 22;
-
     /**
      * @param  Collection<int, IpAddress>  $records
-     * @return array{roots: list<array<string, mixed>>, wide: list<IpAddress>, skipped: int}
+     * @param  string|null  $openUuid  Açık gelecek bloğun uuid'i (bölmeden dönüş).
+     * @return array{blocks: list<array<string, mixed>>, others: list<IpAddress>, skipped: int}
      */
-    public function build(Collection $records): array
+    public function build(Collection $records, ?string $openUuid = null): array
     {
-        $entries = [];
-        $wide = [];
+        $blocks = [];
+        $rest = [];
         $skipped = 0;
 
         foreach ($records as $record) {
             $start = $this->ipv4($record->address);
 
-            if ($start === null) {
-                $skipped++;
-
-                continue;
-            }
-
-            $entry = ['start' => $start & $this->mask($record->prefix), 'prefix' => $record->prefix, 'record' => $record];
-
-            if ($record->prefix < self::ROOT_PREFIX) {
-                $wide[] = $entry;
-            } else {
-                $entries[] = $entry;
-            }
+            match (true) {
+                $start === null => $skipped++,
+                $record->prefix === Ipv4BlockRules::BLOCK_PREFIX => $blocks[] = ['start' => $start & $this->mask(24), 'record' => $record],
+                default => $rest[] = ['start' => $start & $this->mask($record->prefix), 'record' => $record],
+            };
         }
 
-        $roots = collect($entries)
-            ->groupBy(fn (array $e): int => $e['start'] & $this->mask(self::ROOT_PREFIX))
-            ->sortKeys()
-            ->map(fn (Collection $group, int $network): array => $this->node(
-                $network,
-                self::ROOT_PREFIX,
-                $group->all(),
-                $this->coveredBy($wide, $network),
-            ))
-            ->values()
-            ->all();
+        [$parts, $others] = $this->attach($blocks, $rest);
 
-        return ['roots' => $roots, 'wide' => array_column($wide, 'record'), 'skipped' => $skipped];
+        /* Kayıtlar sort_key sırasıyla gelir; aynı /24 iki grupta varsa ikisi de çizilir. */
+        $rows = array_map(
+            fn (array $b): array => $this->block($b, $parts[$this->key($b['record'], $b['start'])] ?? [], $openUuid),
+            $blocks,
+        );
+
+        return ['blocks' => $rows, 'others' => $others, 'skipped' => $skipped];
     }
 
     /**
-     * @param  list<array{start: int, prefix: int, record: IpAddress}>  $entries  Bu düğümün içindeki kayıtlar.
-     * @param  bool  $inBlock  Üstteki bir blok bu düğümü kapsıyor mu.
+     * Parçaları bloklarına dağıtır; aynı gruptaki bir /24'e düşmeyen kayıt
+     * "diğerleri"ne gider.
+     *
+     * @param  list<array{start: int, record: IpAddress}>  $blocks
+     * @param  list<array{start: int, record: IpAddress}>  $rest
+     * @return array{0: array<string, list<array{start: int, record: IpAddress}>>, 1: list<IpAddress>}
+     */
+    private function attach(array $blocks, array $rest): array
+    {
+        $keys = array_flip(array_map(fn (array $b): string => $this->key($b['record'], $b['start']), $blocks));
+        $parts = [];
+        $others = [];
+
+        foreach ($rest as $entry) {
+            $key = $this->key($entry['record'], $entry['start'] & $this->mask(24));
+
+            if ($entry['record']->prefix > Ipv4BlockRules::BLOCK_PREFIX && isset($keys[$key])) {
+                $parts[$key][] = $entry;
+            } else {
+                $others[] = $entry['record'];
+            }
+        }
+
+        return [$parts, $others];
+    }
+
+    /**
+     * @param  array{start: int, record: IpAddress}  $block
+     * @param  list<array{start: int, record: IpAddress}>  $parts
      * @return array<string, mixed>
      */
-    private function node(int $network, int $prefix, array $entries, bool $inBlock): array
+    private function block(array $block, array $parts, ?string $openUuid): array
     {
-        $size = 2 ** (32 - $prefix);
-        $own = array_values(array_filter($entries, fn (array $e): bool => $e['prefix'] === $prefix));
-        $inner = array_values(array_filter($entries, fn (array $e): bool => $e['prefix'] > $prefix));
+        usort($parts, fn (array $a, array $b): int => [$a['start'], $a['record']->prefix] <=> [$b['start'], $b['record']->prefix]);
 
-        $inBlock = $inBlock || array_filter($own, fn (array $e): bool => $this->isBlock($e)) !== [];
-        $space = $inBlock ? $size : $this->union(array_filter($inner, fn (array $e): bool => $this->isBlock($e)));
-        $used = $this->union(array_filter($entries, fn (array $e): bool => ! $this->isBlock($e)));
-
-        $children = [];
-        if ($inner !== [] && $prefix < 32) {
-            $half = $size / 2;
-            foreach ([$network, $network + $half] as $start) {
-                $inside = array_values(array_filter($inner, fn (array $e): bool => $e['start'] >= $start && $e['start'] < $start + $half));
-                $children[] = $inside === []
-                    ? $this->leaf($start, $prefix + 1, $inBlock)
-                    : $this->node($start, $prefix + 1, $inside, $inBlock);
-            }
-        }
+        $rows = array_map(fn (array $p): array => $this->part($p['record']), $parts);
+        $used = $this->union(array_filter($parts, fn (array $p): bool => filled($p['record']->name)));
 
         return [
-            ...$this->base($network, $prefix),
-            'space' => $space,
+            'record' => $block['record'],
+            'notation' => long2ip($block['start']).'/24',
+            'partsLabel' => count($rows) > 0 ? count($rows).' parça' : 'Bölünmedi',
             'used' => $used,
-            ...$this->state($used, $space),
-            'records' => array_map(fn (array $e): IpAddress => $e['record'], $own),
-            'children' => $children,
-        ];
-    }
-
-    /** @return array<string, mixed> */
-    private function leaf(int $network, int $prefix, bool $inBlock): array
-    {
-        $space = $inBlock ? 2 ** (32 - $prefix) : 0;
-
-        return [
-            ...$this->base($network, $prefix),
-            'space' => $space,
-            'used' => 0,
-            ...$this->state(0, $space),
-            'records' => [],
-            'children' => [],
-        ];
-    }
-
-    /** @return array{notation: string, prefix: int, size: int, sizeLabel: string} */
-    private function base(int $network, int $prefix): array
-    {
-        $size = 2 ** (32 - $prefix);
-
-        return [
-            'notation' => long2ip($network).'/'.$prefix,
-            'prefix' => $prefix,
-            'size' => $size,
-            'sizeLabel' => number_format($size, 0, ',', '.').' adres',
+            ...$this->state($used, 256),
+            'open' => $openUuid !== null && $block['record']->uuid === $openUuid,
+            'parts' => $rows,
         ];
     }
 
     /**
-     * $space: düğümde blokların tanımladığı alan; $used: ondan atanan.
+     * Parça satırı: ağ geçidi bloğun ilk kullanılabilir adresi, müşteriye
+     * verilen aralık ondan sonrası (ör. /29: .1 geçit, .2–.6 müşteri).
+     *
+     * @return array<string, mixed>
+     */
+    private function part(IpAddress $record): array
+    {
+        $cidr = Cidr::make($record->address, $record->prefix);
+        $hosts = ! $cidr->isSingleHost() && ! $cidr->isPointToPoint();
+        $used = filled($record->name);
+
+        return [
+            'record' => $record,
+            'notation' => $cidr->toString(),
+            'gateway' => $hosts ? $cidr->firstUsable() : null,
+            'first' => $hosts ? long2ip(ip2long($cidr->firstUsable()) + 1) : $cidr->firstUsable(),
+            'last' => $cidr->lastUsable(),
+            'mask' => $cidr->netmask(),
+            ...$used
+                ? ['stateLabel' => 'Dolu', 'badge' => BadgeVariant::Red]
+                : ['stateLabel' => 'Boş', 'badge' => BadgeVariant::Green],
+        ];
+    }
+
+    /**
+     * $space: bloğun alanı; $used: ondan atanan.
      *
      * @return array{state: string, stateLabel: string, badge: BadgeVariant}
      */
     private function state(int $used, int $space): array
     {
         return match (true) {
-            $space === 0 => ['state' => 'unregistered', 'stateLabel' => 'Kayıtsız', 'badge' => BadgeVariant::Gray],
             $used === 0 => ['state' => 'free', 'stateLabel' => 'Boş', 'badge' => BadgeVariant::Green],
             $used >= $space => ['state' => 'full', 'stateLabel' => 'Dolu', 'badge' => BadgeVariant::Red],
             default => ['state' => 'partial', 'stateLabel' => '%'.$this->percent($used, $space).' dolu', 'badge' => BadgeVariant::Yellow],
         };
     }
 
-    /** @param  array{prefix: int}  $entry */
-    private function isBlock(array $entry): bool
+    /** Parçanın bloğu: aynı grup, aynı /24. */
+    private function key(IpAddress $record, int $network): string
     {
-        return $entry['prefix'] <= Ipv4BlockRules::BLOCK_PREFIX;
-    }
-
-    /** @param  list<array{start: int, prefix: int}>  $wide */
-    private function coveredBy(array $wide, int $network): bool
-    {
-        foreach ($wide as $block) {
-            if (($network & $this->mask($block['prefix'])) === $block['start']) {
-                return true;
-            }
-        }
-
-        return false;
+        return $record->address_group_id.'|'.$network;
     }
 
     /**
-     * Kayıtların kapladığı adres sayısı. CIDR blokları ya iç içedir ya
-     * ayrık; başka bir kaydın içinde kalan kayıt ikinci kez sayılmaz.
+     * Kayıtların kapladığı adres sayısı. Bölme parçaları çakışmaz; kuraldan
+     * önce girilmiş iç içe kayıtlar ikinci kez sayılmasın diye birleşim.
      *
-     * @param  array<int, array{start: int, prefix: int}>  $entries
+     * @param  array<int, array{start: int, record: IpAddress}>  $entries
      */
     private function union(array $entries): int
     {
-        usort($entries, fn (array $a, array $b): int => [$a['start'], $a['prefix']] <=> [$b['start'], $b['prefix']]);
+        usort($entries, fn (array $a, array $b): int => [$a['start'], $a['record']->prefix] <=> [$b['start'], $b['record']->prefix]);
 
         $total = 0;
         $end = -1;
@@ -188,7 +165,7 @@ class Ipv4BlockPlan
             if ($entry['start'] <= $end) {
                 continue;
             }
-            $size = 2 ** (32 - $entry['prefix']);
+            $size = 2 ** (32 - $entry['record']->prefix);
             $total += $size;
             $end = $entry['start'] + $size - 1;
         }

@@ -40,22 +40,31 @@
             <div class="column__body">
                 @if ($ipv6Only)
                     <x-ui.empty title="IPv6 grubu" text="Blok planı IPv4 adresleri içindir." />
-                @elseif ($roots === [] && $wide === [])
-                    <x-ui.empty title="IPv4 adresi yok" text="Bu görünümde planlanacak IPv4 adresi ya da bloğu yok." />
+                @elseif ($blocks === [] && $others === [])
+                    <x-ui.empty title="IPv4 bloğu yok" text="Bu görünümde /24 blok yok. Bloğu listeden ekleyin, buradan bölün." />
                 @else
                     <div class="block-plan">
                         <p class="text-sm text-muted">
-                            Bloklar /22'den /32'ye kadar ikiye bölünür. /24 ve daha geniş kayıtlar adres alanını tanımlar;
-                            "Boş" alanda atama yoktur, "Kayıtsız" alan hiçbir bloğa ait değildir.
+                            Her /24 blok tek kat bölünür; parçalar eşit ya da farklı boyda olabilir. Adı verilen parça
+                            "Dolu" sayılır. Bloğu açmak için soldaki oka tıklayın.
                         </p>
 
-                        @if ($wide !== [])
+                        @if ($blocks !== [])
+                            <section class="panel">
+                                @foreach ($blocks as $block)
+                                    @include('ip-addresses.partials.plan-block')
+                                @endforeach
+                            </section>
+                        @endif
+
+                        @if ($others !== [])
                             <section class="panel">
                                 <div class="credential-section">
-                                    <span class="credential-section__name">/22'den geniş bloklar</span>
+                                    <span class="credential-section__name">Bloğa bağlı olmayan kayıtlar</span>
                                 </div>
-                                @foreach ($wide as $record)
-                                    <div class="block-node__row block-node__row--leaf">
+                                @foreach ($others as $record)
+                                    <div class="block-node__row">
+                                        <span class="block-node__toggle block-node__toggle--none" aria-hidden="true"></span>
                                         <a href="{{ route('ip-addresses.index', ['grup' => $selectedGroup?->uuid, 'kayit' => $record->uuid]) }}"
                                            class="block-node__address mono">{{ $record->notation }}</a>
                                         <span class="block-node__records truncate">{{ $record->name ?? '' }}</span>
@@ -63,15 +72,29 @@
                                 @endforeach
                             </section>
                         @endif
-
-                        @foreach ($roots as $node)
-                            <section class="panel block-plan__root">
-                                @include('ip-addresses.partials.plan-node')
-                            </section>
-                        @endforeach
                     </div>
                 @endif
             </div>
         </div>
     </div>
+
+    {{-- Böl penceresi: ?pencere=bol&blok=… ile sunucudan açık gelir; hata sonrası da aynı adrese döner. --}}
+    @if ($splitBlock)
+        <x-ui.modal id="block-split" :title="$splitBlock->notation.' bölünecek'" :open="true">
+            <form method="POST" action="{{ route('ip-addresses.split', $splitBlock) }}" autocomplete="off" data-inline>
+                @csrf
+
+                <div class="modal__body">
+                    <x-ui.errors class="modal__alert" />
+
+                    <x-form.field name="layout" label="Parçalar"
+                                  hint="Boyları blok başından sırayla yazın; 29x10 on tane /29 demektir. Ör. 29x10 28x2 29x6 27 28x2 29x2 28. Toplam 256 adres olmalı. Bölme tek kattır, parça yeniden bölünmez.">
+                        <x-form.input name="layout" mono required maxlength="500" spellcheck="false" />
+                    </x-form.field>
+                </div>
+
+                <x-ui.modal-actions submit="Böl" />
+            </form>
+        </x-ui.modal>
+    @endif
 </x-layout.app>

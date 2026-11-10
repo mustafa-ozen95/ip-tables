@@ -4,100 +4,116 @@ declare(strict_types=1);
 
 namespace App\Services;
 
-use App\Enums\GroupKind;
 use App\Models\AddressGroup;
 use App\Models\IpAddress;
 use App\Support\Net\Cidr;
-use Illuminate\Support\Collection;
+use Illuminate\Database\Eloquent\Collection;
 
 /**
- * IPv4 blok kuralı: /24'ten küçük (/25–/32) bir kayıt DOĞRUDAN eklenmez,
- * yalnız aynı gruptaki kayıtlı bir bloğun (/24 ya da daha geniş) İÇİNE
- * eklenir. Blok adres alanını tanımlar, içindekiler ondan yapılan
- * atamalardır (bkz. Ipv4BlockPlan).
+ * IPv4 blok kuralı. Elle eklenebilen IPv4 kaydı yalnız /24 BLOKTUR. Daha
+ * küçüğü (/25–/32) elle eklenmez: blok BÖLÜNÜR ve parçalar kayıt olarak
+ * açılır (bkz. Ipv4SplitLayout, IpAddressWriter::split).
  *
- * Kural ekleme, düzenleme ve silmede AYNI yerden sınanır: içinde atama
- * olan bir bloğu silmek ya da başka yere taşımak atamaları bloksuz
- * bırakırdı — o yol da kapalıdır.
+ * Bölme TEK KATTIR: parçalar eşit ya da farklı boyda olabilir ama bir
+ * parça yeniden bölünmez, /25'in içinde /26 olmaz. Yanlış bölme parça parça
+ * düzeltilmez; bölme kaldırılır, blok yeniden bölünür.
+ *
+ * Kural ekleme, düzenleme ve silmede AYNI yerden sınanır: parçanın adresini
+ * değiştirmek ya da onu tek başına silmek bölmeyi bozardı, bölünmüş bloğu
+ * taşımak parçaları bloksuz bırakırdı — o yollar da kapalıdır. Parçanın
+ * adı, açıklaması ve alt grubu serbesttir; atama oradan yapılır.
+ *
+ * Kuraldan önce girilmiş /32'ler ve geniş bloklar silinmez; adları
+ * değişebilir, yerleri yalnız /24'e çevrilerek değişir.
  *
  * IPv6 bu kurala girmez.
  */
 class Ipv4BlockRules
 {
-    /** Doğrudan eklenebilen en küçük blok. */
+    /** Elle eklenebilen tek IPv4 boyu; bölünen blok da budur. */
     public const BLOCK_PREFIX = 24;
 
-    public function needsParent(string $address, int $prefix): bool
+    /**
+     * Ekleme ($record yok) ve düzenlemenin blok kuralı hatası.
+     */
+    public function writeError(?IpAddress $record, AddressGroup $group, ParsedAddress $parsed): ?string
     {
-        return $this->isIpv4($address) && $prefix > self::BLOCK_PREFIX;
+        if (! $this->isIpv4($parsed->address)) {
+            return null;
+        }
+
+        if ($record !== null && $this->unchanged($record, $group, $parsed)) {
+            return null;
+        }
+
+        return match (true) {
+            $record !== null && $this->blockOf($record) !== null => 'Parçanın adresi ve grubu değişmez; '
+                .'gerekirse bloğun bölmesini kaldırıp yeniden bölün.',
+            $record !== null && $this->isBlock($record) && $this->parts($record)->isNotEmpty() => 'Bu blok bölünmüş; '
+                .'adresini ya da grubunu değiştirmek için önce bölmesini kaldırın.',
+            $parsed->prefix !== self::BLOCK_PREFIX => 'IPv4’te yalnız /'.self::BLOCK_PREFIX.' blok eklenir; '
+                .'küçük parçalar Blok planı’nda blok bölünerek açılır.',
+            default => null,
+        };
     }
 
-    /** Grupta bu adresi içeren bir blok var mı ($except dışında). */
-    public function hasParent(AddressGroup $group, string $address, int $prefix, ?IpAddress $except = null): bool
+    /** Silmenin blok kuralı hatası. */
+    public function deleteError(IpAddress $record): ?string
     {
-        $target = Cidr::make($address, $prefix);
+        if ($this->blockOf($record) !== null) {
+            return 'Parça tek başına silinmez; boşaltmak için adını temizleyin ya da bloğun bölmesini kaldırın.';
+        }
 
-        return $this->blocks($group, $except)
-            ->contains(fn (IpAddress $block): bool => Cidr::make($block->address, $block->prefix)->contains($target));
+        $parts = $this->isBlock($record) ? $this->parts($record)->count() : 0;
+
+        return $parts > 0 ? "Bu blok {$parts} parçaya bölünmüş; önce bölmesini kaldırın." : null;
+    }
+
+    /** Bölünebilen kayıt: IPv4 /24. */
+    public function isBlock(IpAddress $record): bool
+    {
+        return $record->prefix === self::BLOCK_PREFIX && $this->isIpv4($record->address);
     }
 
     /**
-     * Bu blok silinirse ya da yeni yerine ($group, $address/$prefix)
-     * taşınırsa bloksuz kalacak atamaların sayısı. Başka bir blok da onları
-     * içeriyorsa ya da yeni yer hâlâ içeriyorsa bloksuz kalmazlar.
+     * Bloğun aynı gruptaki parçaları (içine düşen /25–/32 kayıtlar), adres
+     * sırasıyla.
+     *
+     * @return Collection<int, IpAddress>
      */
-    public function orphans(IpAddress $block, ?AddressGroup $group = null, ?string $address = null, ?int $prefix = null): int
+    public function parts(IpAddress $block): Collection
     {
-        if ($this->needsParent($block->address, $block->prefix) || ! $this->isIpv4($block->address)) {
-            return 0;
-        }
-
         $range = Cidr::make($block->address, $block->prefix);
-        $moved = $group !== null && $group->is($block->group) && $address !== null && $this->isIpv4($address)
-            ? Cidr::make($address, (int) $prefix)
-            : null;
 
         return $block->group->ipAddresses()
             ->where('prefix', '>', self::BLOCK_PREFIX)
-            ->whereKeyNot($block->getKey())
+            ->ordered()
             ->get()
-            ->filter(function (IpAddress $a) use ($block, $range, $moved): bool {
-                if (! $this->isIpv4($a->address)) {
-                    return false;
-                }
-                $own = Cidr::make($a->address, $a->prefix);
-
-                return $range->contains($own)
-                    && ! $moved?->contains($own)
-                    && ! $this->hasParent($block->group, $a->address, $a->prefix, except: $block);
-            })
-            ->count();
+            ->filter(fn (IpAddress $a): bool => $this->isIpv4($a->address) && $range->contains(Cidr::make($a->address, $a->prefix)))
+            ->values();
     }
 
-    public function orphanMessage(int $count): string
+    /** Kaydı içeren, aynı gruptaki /24 blok; kayıt bir parça değilse null. */
+    public function blockOf(IpAddress $record): ?IpAddress
     {
-        return "Bu blokta {$count} kayıt var; blok kalkarsa onlar bloksuz kalır. Önce onları silin ya da taşıyın.";
-    }
-
-    public function message(int $prefix): string
-    {
-        return "/{$prefix} doğrudan eklenemez; önce bu adresi içeren /".self::BLOCK_PREFIX
-            .' (ya da daha geniş) bloğu aynı gruba ekleyin.';
-    }
-
-    /** @return Collection<int, IpAddress> */
-    private function blocks(AddressGroup $group, ?IpAddress $except)
-    {
-        if ($group->kind === GroupKind::Ipv6 || $group->kind === GroupKind::LocalIpv6) {
-            return collect();
+        if ($record->prefix <= self::BLOCK_PREFIX || ! $this->isIpv4($record->address)) {
+            return null;
         }
 
-        return $group->ipAddresses()
-            ->where('prefix', '<=', self::BLOCK_PREFIX)
-            ->when($except, fn ($q, IpAddress $e) => $q->whereKeyNot($e->getKey()))
+        $own = Cidr::make($record->address, $record->prefix);
+
+        /* Adresle süzülmez: hizasız girilmiş blok (192.0.2.5/24) da bloktur. */
+        return $record->group->ipAddresses()
+            ->where('prefix', self::BLOCK_PREFIX)
             ->get()
-            ->filter(fn (IpAddress $b): bool => $this->isIpv4($b->address))
-            ->values();
+            ->first(fn (IpAddress $b): bool => Cidr::make($b->address, $b->prefix)->contains($own));
+    }
+
+    private function unchanged(IpAddress $record, AddressGroup $group, ParsedAddress $parsed): bool
+    {
+        return $group->is($record->group)
+            && $parsed->address === $record->address
+            && $parsed->prefix === $record->prefix;
     }
 
     private function isIpv4(string $address): bool

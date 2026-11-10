@@ -44,11 +44,15 @@
 }
 
 /*
- * BLOK PLANI (ip-addresses/plan): IPv4 bloklarının /22'den /32'ye ikiye
- * bölünen ağacı. Kardeş panellerde ağaç bileşeni yok; katlanır panelin
- * (collapsible.css) oku ve renkleri aynen alınır, burada yalnız girinti
- * ve satır düzeni tanımlanır. Girinti küçük tutulur: on düzey iç içe
- * blok 320 pikselde de sığmalı.
+ * BLOK PLANI (ip-addresses/plan): /24 bloklar ve altlarında bölme parçaları.
+ * Kardeş panellerde ağaç bileşeni yok; katlanır panelin (collapsible.css)
+ * oku ve renkleri aynen alınır, burada satır düzeni ve tıklama alanı
+ * tanımlanır.
+ *
+ * Blok yalnız SOLDAKİ OKLA açılır: satırın geri kalanı bağlantı taşır ve
+ * yanlışlıkla 256 satırlık tablo açmamalı. Bunun için betik yazılmaz;
+ * <summary> tıklamayı geçirmez, yalnız ok ve bağlantılar alır. Klavyede
+ * <summary> odaklanır ve Enter/Boşluk yine açar.
  */
 .block-plan {
     display: flex;
@@ -62,28 +66,41 @@
     align-items: center;
     gap: var(--space-3);
     min-width: 0;
-    padding: var(--space-2) var(--space-4);
+    padding: var(--space-2) var(--space-4) var(--space-2) var(--space-2);
     border-top: 1px solid var(--color-line);
 }
 
-.block-plan__root > .block-node > .block-node__row,
-.block-plan__root > .block-node__row {
+.panel > .block-node:first-child > .block-node__row,
+.panel > .block-node__row:first-child {
     border-top: 0;
 }
 
 .block-node > summary {
-    cursor: pointer;
     list-style: none;
+    pointer-events: none;
 }
 
 .block-node > summary::-webkit-details-marker {
     display: none;
 }
 
-.block-node > summary::before,
-.block-node__row--leaf::before {
-    content: '';
+.block-node > summary a,
+.block-node__toggle {
+    pointer-events: auto;
+}
+
+/* Okun tıklama alanı: üçgenin kendisi parmakla vurulamayacak kadar küçük. */
+.block-node__toggle {
+    display: inline-flex;
     flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-2);
+    cursor: pointer;
+}
+
+.block-node__toggle::before {
+    content: '';
     width: 0;
     height: 0;
     border-left: 4px solid var(--color-text-muted);
@@ -92,17 +109,17 @@
     transition: transform var(--transition-fast);
 }
 
-/* Yaprağın oku yok; yeri boş kalır ki adresler alt alta hizalansın. */
-.block-node__row--leaf::before {
+/* Bölünmemiş blokta ok yok; yeri boş kalır ki adresler alt alta hizalansın. */
+.block-node__toggle--none {
+    cursor: default;
+}
+
+.block-node__toggle--none::before {
     border-left-color: transparent;
 }
 
-.block-node[open] > summary::before {
+.block-node[open] > summary .block-node__toggle::before {
     transform: rotate(90deg);
-}
-
-.block-node__children {
-    padding-left: var(--space-3);
 }
 
 .block-node__address {
@@ -118,9 +135,19 @@
     flex-shrink: 0;
 }
 
+.block-node__parts {
+    padding: 0 var(--space-4) var(--space-4);
+}
+
+.block-node__foot {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: var(--space-3);
+}
+
 @media (max-width: 720px) {
     .block-plan { padding: var(--space-3); }
-    .block-node__row { padding: var(--space-2) var(--space-3); }
-    .block-node__children { padding-left: var(--space-2); }
+    .block-node__row { padding: var(--space-2) var(--space-3) var(--space-2) var(--space-1); }
+    .block-node__parts { padding: 0 var(--space-3) var(--space-3); }
     .block-node__size { display: none; }
 }
