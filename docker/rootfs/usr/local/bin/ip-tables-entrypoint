@@ -60,7 +60,7 @@ fi
 #
 #  DB_CONNECTION verilmezse Laravel SQLite'a düşer ve göçler "Database file at
 #  path [ip-tables] does not exist" ile patlar.
-: "${APP_NAME:=Erişim Yönetim Sistemi}"
+: "${APP_NAME:=IPT}"
 : "${APP_ENV:=production}"
 : "${APP_DEBUG:=false}"
 : "${APP_LOCALE:=tr}"
