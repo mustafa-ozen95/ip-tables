@@ -7,7 +7,7 @@ namespace App\Enums;
 /**
  * Grubun türü: gruba hangi adreslerin girebileceği.
  *
- * Dört yerleşik grup (IPv4, IPv6, Yerel IPv4, Yerel IPv6) kurulumla gelir;
+ * Dört yerleşik grup (IPv4, IPv6, Local IPv4, Local IPv6) kurulumla gelir;
  * "Karışık" her adresi kabul eder. Adresin türünü IpAddressParser belirler,
  * kullanıcı seçmez: yerel bir adres "IPv4" grubuna düşemez.
  *
@@ -48,8 +48,8 @@ enum GroupKind: string
         return match ($this) {
             self::Ipv4 => 'IPv4',
             self::Ipv6 => 'IPv6',
-            self::LocalIpv4 => 'Yerel IPv4',
-            self::LocalIpv6 => 'Yerel IPv6',
+            self::LocalIpv4 => 'Local IPv4',
+            self::LocalIpv6 => 'Local IPv6',
             self::Mixed => 'Karışık',
         };
     }

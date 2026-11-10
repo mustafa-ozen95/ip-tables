@@ -71,7 +71,7 @@ Eksik olan her şey üretilir ve **hacimde saklanır**:
 İlk yönetici `ADMIN_EMAIL` ile ve **yalnızca kullanıcı tablosu boşken** açılır; adres
 verilmezse hesap hiç açılmaz. Parola sabit **değildir**: verilmezse rastgele üretilir
 (imaj herkeste aynı olduğu için sabit parola herkeste aynı parola demek olurdu).
-Örnek veri hiç yazılmaz; yerleşik dört grup (IPv4, IPv6, Yerel IPv4, Yerel IPv6)
+Örnek veri hiç yazılmaz; yerleşik dört grup (IPv4, IPv6, Local IPv4, Local IPv6)
 göçle gelir ve boştur.
 
 ## ⚠ APP_KEY'i yedekleyin

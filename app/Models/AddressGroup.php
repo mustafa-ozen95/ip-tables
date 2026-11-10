@@ -16,7 +16,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
- * Adres grubu — IPv4, Yerel IPv6, "Müşteri A"...
+ * Adres grubu — IPv4, Local IPv6, "Müşteri A"...
  *
  * Yetki bu seviyede verilir: kullanıcıya adres adres izin vermek yerine grup
  * verilir. Yeni bir adres eklendiğinde izin listesini güncellemek gerekmez;

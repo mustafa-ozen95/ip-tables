@@ -6,7 +6,7 @@ return [
 
     /*
     | Yerel sayılan aralıklar. Adresin türü buradan belirlenir:
-    | bu aralıklardan birindeyse "Yerel IPv4/IPv6", değilse "IPv4/IPv6"
+    | bu aralıklardan birindeyse "Local IPv4/IPv6", değilse "IPv4/IPv6"
     | türündeki gruplara girer (bkz. App\Enums\GroupKind).
     |
     | RFC 1918, döngü, bağlantı-yerel, CGNAT (RFC 6598) ve IPv6 ULA. Liste

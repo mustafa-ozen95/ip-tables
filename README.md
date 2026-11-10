@@ -19,8 +19,8 @@ built-in groups come with every installation; any number can be added:
 | --- | --- | --- |
 | IPv4 | `ipv4` | Public IPv4 addresses and networks |
 | IPv6 | `ipv6` | Public IPv6 addresses and networks |
-| Yerel IPv4 | `local-ipv4` | Private / local IPv4 (10/8, 172.16/12, 192.168/16 …) |
-| Yerel IPv6 | `local-ipv6` | Private / local IPv6 (fc00::/7, fe80::/10 …) |
+| Local IPv4 | `local-ipv4` | Private / local IPv4 (10/8, 172.16/12, 192.168/16 …) |
+| Local IPv6 | `local-ipv6` | Private / local IPv6 (fc00::/7, fe80::/10 …) |
 | *(new group)* | `mixed` | Any address |
 
 A group's kind decides which addresses it accepts, and the rule is enforced

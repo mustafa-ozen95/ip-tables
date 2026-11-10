@@ -18,8 +18,8 @@ yerleşik grup gelir, istenen kadar grup eklenebilir:
 | --- | --- | --- |
 | IPv4 | `ipv4` | Genel IPv4 adres ve ağları |
 | IPv6 | `ipv6` | Genel IPv6 adres ve ağları |
-| Yerel IPv4 | `local-ipv4` | Özel / yerel IPv4 (10/8, 172.16/12, 192.168/16 …) |
-| Yerel IPv6 | `local-ipv6` | Özel / yerel IPv6 (fc00::/7, fe80::/10 …) |
+| Local IPv4 | `local-ipv4` | Özel / yerel IPv4 (10/8, 172.16/12, 192.168/16 …) |
+| Local IPv6 | `local-ipv6` | Özel / yerel IPv6 (fc00::/7, fe80::/10 …) |
 | *(yeni grup)* | `mixed` | Her adres |
 
 Grubun türü hangi adreslerin girebileceğini belirler. Kural iki yoldan da
