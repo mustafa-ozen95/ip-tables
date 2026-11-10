@@ -73,7 +73,7 @@ class ContainerLayoutTest extends TestCase
     {
         $c = self::oku('docker-compose.yml');
 
-        foreach (["\n  ip-tables:\n", "\n  db:\n", "\n  redis:\n", 'image: mariadb:', 'replicas: ${DB_REPLICAS:-1}', 'expose: ["80"]', 'internal: ${NETWORK_ISOLATED:-false}'] as $var) {
+        foreach (["\n  panel:\n", "\n  db:\n", "\n  redis:\n", 'image: mariadb:', 'replicas: ${DB_REPLICAS:-1}', 'expose: ["80"]', 'internal: ${NETWORK_ISOLATED:-false}'] as $var) {
             $this->assertStringContainsString($var, $c, $var);
         }
         $this->assertStringNotContainsString('env_file', $c);

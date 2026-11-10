@@ -20,7 +20,7 @@ kendisi ya da Caddy/nginx); panel isteğin HTTPS olduğunu `X-Forwarded-Proto`'d
 Kendi Caddy'nizle kuracaksanız örnek kural `docker/proxy.caddy`'de. Vekilsiz deneme:
 `cp docker-compose.override.example.yml docker-compose.override.yml` (düz HTTP, port 8080).
 
-NineDeploy örneği: compose türünde depo, ana servis `ip-tables` (varsayılan; servis adıyla aynı), port 80,
+NineDeploy örneği: compose türünde depo, ana servis `panel`, port 80,
 sağlık yolu `/up`, alan adı panelin adı; `APP_URL` o adın `https://` ile başlayan hâli.
 
 

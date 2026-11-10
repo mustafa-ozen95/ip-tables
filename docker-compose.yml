@@ -12,7 +12,7 @@
 #  kendisi ya da Caddy/nginx) verir, panele konteyner ağından 80'den ulaşır.
 #  Vekilsiz deneme için docker-compose.override.example.yml.
 #
-#  Servisler: ip-tables (nginx + php-fpm + işçi + zamanlayıcı), db (MariaDB),
+#  Servisler: panel (nginx + php-fpm + işçi + zamanlayıcı), db (MariaDB),
 #  redis (önbellek, oturum, kuyruk; kalıcılık kapalı).
 #
 #  Dışarıdaki ya da platformun yönettiği bir veritabanı: DB_HOST ve kimlik
@@ -23,7 +23,7 @@
 # =============================================================================
 
 services:
-  ip-tables:
+  panel:
     build:
       context: .
       dockerfile: docker/Dockerfile
