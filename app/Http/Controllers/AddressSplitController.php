@@ -14,8 +14,8 @@ use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Routing\Controllers\Middleware;
 
 /**
- * /24 bloğun bölmesi: böl ve bölmeyi kaldır. İkisi de blok planına,
- * bloğu açık olarak döner.
+ * /24 bloğun bölmesi: böl ve bölmeyi kaldır. İkisi de listeye, bloğu
+ * seçili olarak döner; bölmeden sonra parçaları da açık gelir.
  */
 class AddressSplitController extends Controller implements HasMiddleware
 {
@@ -34,20 +34,24 @@ class AddressSplitController extends Controller implements HasMiddleware
         $parts = $request->parts();
         $this->writer->split($ipAddress, $parts, $request->layout());
 
-        return $this->plan($ipAddress, "{$ipAddress->notation} ".count($parts).' parçaya bölündü.');
+        return $this->show($ipAddress, "{$ipAddress->notation} ".count($parts).' parçaya bölündü.', open: true);
     }
 
     public function destroy(UnsplitIpAddressRequest $request, IpAddress $ipAddress, Ipv4BlockRules $rules): RedirectResponse
     {
         $this->writer->unsplit($ipAddress, $rules->parts($ipAddress), $request->string('reason')->value());
 
-        return $this->plan($ipAddress, "{$ipAddress->notation} bölmesi kaldırıldı.");
+        return $this->show($ipAddress, "{$ipAddress->notation} bölmesi kaldırıldı.");
     }
 
-    private function plan(IpAddress $ipAddress, string $message): RedirectResponse
+    private function show(IpAddress $ipAddress, string $message, bool $open = false): RedirectResponse
     {
         return redirect()
-            ->route('ip-addresses.plan', ['grup' => $ipAddress->group->uuid, 'blok' => $ipAddress->uuid])
+            ->route('ip-addresses.index', [
+                'grup' => $ipAddress->group->uuid,
+                'kayit' => $ipAddress->uuid,
+                'blok' => $open ? $ipAddress->uuid : null,
+            ])
             ->with('status', $message);
     }
 }

@@ -16,7 +16,9 @@ use App\Support\Net\Cidr;
  * zorundadır (/28 ancak 16'nın katında).
  *
  * Parçalar bloğu TAM doldurur; boşta kalan alan bölünmemiş alan olurdu ve
- * bölme tek kat olduğu için oraya sonradan parça açılamazdı.
+ * bölme tek kat olduğu için oraya sonradan parça açılamazdı. Bu yüzden
+ * yazılan SON BOY bloğun sonuna kadar tekrarlanır: yalnız "29" 32 tane /29,
+ * "28x2 29" iki /28 ve kalanı /29 demektir (bkz. complete).
  */
 class Ipv4SplitLayout
 {
@@ -52,6 +54,31 @@ class Ipv4SplitLayout
         }
 
         return $prefixes === [] ? null : $prefixes;
+    }
+
+    /**
+     * Son boyu bloğun sonuna kadar tekrarlar. Son parça kendi sınırında
+     * başladıysa kalan alan onun katıdır; başlamadıysa error() yakalar.
+     *
+     * @param  list<int>  $prefixes
+     * @return list<int>
+     */
+    public function complete(array $prefixes): array
+    {
+        $last = end($prefixes);
+
+        if ($last < self::MIN_PREFIX || $last > self::MAX_PREFIX) {
+            return $prefixes;
+        }
+
+        $total = array_sum(array_map(fn (int $p): int => $this->size($p), $prefixes));
+
+        while ($total + $this->size($last) <= self::BLOCK_SIZE) {
+            $prefixes[] = $last;
+            $total += $this->size($last);
+        }
+
+        return $prefixes;
     }
 
     /** @param  list<int>  $prefixes */
@@ -126,6 +153,11 @@ class Ipv4SplitLayout
             fn (array $run): string => "/{$run[0]}".($run[1] > 1 ? "×{$run[1]}" : ''),
             $runs,
         ));
+    }
+
+    private function size(int $prefix): int
+    {
+        return 2 ** (32 - $prefix);
     }
 
     private function address(string $network, int $offset): string

@@ -55,11 +55,12 @@ class SplitIpAddressRequest extends FormRequest
             $rules = app(Ipv4BlockRules::class);
             $layout = app(Ipv4SplitLayout::class);
             $prefixes = $layout->parse($this->string('layout')->toString());
+            $prefixes = $prefixes === null ? null : $layout->complete($prefixes);
 
             $error = match (true) {
                 ! $rules->isBlock($this->block()) => 'Yalnız IPv4 /'.Ipv4BlockRules::BLOCK_PREFIX.' blok bölünür.',
                 $rules->parts($this->block())->isNotEmpty() => 'Bu blok zaten bölünmüş; yeniden bölmek için önce bölmesini kaldırın.',
-                $prefixes === null => 'Parça boylarını sırasıyla yazın, ör. "29x10 28 28 27": "29x10" on tane /29 demektir.',
+                $prefixes === null => 'Parça boylarını sırasıyla yazın, ör. "29" ya da "29x10 28x2 27": "29x10" on tane /29 demektir.',
                 default => $layout->error($this->block()->address, $prefixes),
             };
 

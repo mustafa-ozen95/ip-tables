@@ -99,14 +99,14 @@ class Ipv4BlockPlanTest extends TestCase
         $this->assertSame(['192.0.2.8/29'], array_map(fn (IpAddress $r): string => $r->name, $plan['others']));
     }
 
+    /** Bloğa girmeyen her kayıt düz satırdır, geldiği sırayla: geniş blok, bloksuz /32, IPv6. */
     #[Test]
-    public function bloksuz_kayit_ve_genis_blok_ayri_ipv6_disarida(): void
+    public function bloga_girmeyenler_duz_satir(): void
     {
         $plan = $this->plan('198.51.0.0/16', '203.0.113.5', '2001:db8::10');
 
         $this->assertSame([], $plan['blocks']);
-        $this->assertSame(['198.51.0.0/16', '203.0.113.5'], array_map(fn (IpAddress $r): string => $r->name, $plan['others']));
-        $this->assertSame(1, $plan['skipped']);
+        $this->assertSame(['198.51.0.0/16', '203.0.113.5', '2001:db8::10'], array_map(fn (IpAddress $r): string => $r->name, $plan['others']));
     }
 
     #[Test]
@@ -118,5 +118,16 @@ class Ipv4BlockPlanTest extends TestCase
         $plan = (new Ipv4BlockPlan)->build($kayitlar, 'acik-blok');
 
         $this->assertSame([false, true], array_column($plan['blocks'], 'open'));
+    }
+
+    #[Test]
+    public function secili_parcanin_blogu_acik_gelir(): void
+    {
+        $kayitlar = $this->kayitlar('192.0.2.0/24', '192.0.2.0/25', '198.51.100.0/24');
+        $kayitlar[1]->uuid = 'secili-parca';
+
+        $plan = (new Ipv4BlockPlan)->build($kayitlar, null, 'secili-parca');
+
+        $this->assertSame([true, false], array_column($plan['blocks'], 'open'));
     }
 }

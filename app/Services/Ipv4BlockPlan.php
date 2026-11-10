@@ -10,34 +10,35 @@ use App\Support\Net\Cidr;
 use Illuminate\Support\Collection;
 
 /**
- * IPv4 blok planı: kayıtlı /24 bloklar adres sırasıyla, her birinin
- * altında bölmeden çıkan parçalar (bkz. Ipv4BlockRules). Parçalar tek
- * kattır; plan bu yüzden iki düzeyden derine inmez.
+ * Adres listesinin blok düzeni: kayıtlı /24 bloklar adres sırasıyla, her
+ * birinin altında bölmeden çıkan parçalar (bkz. Ipv4BlockRules). Parçalar
+ * tek kattır; liste bu yüzden iki düzeyden derine inmez.
  *
  * Doluluk ADI verilmiş parçalardır: bölme parçaları adsız açar, atama
  * parçaya ad vererek yapılır. Bölünmemiş blok "Boş" sayılır.
  *
- * Hiçbir /24'e oturmayan IPv4 kayıtları (kuraldan önce girilmiş /32'ler,
- * geniş bloklar) ayrı listede durur. IPv6 bu plana girmez.
+ * Bloğa girmeyen her kayıt (IPv6, kuraldan önce girilmiş /32'ler, geniş
+ * bloklar) "diğerleri"dir ve listede düz satır olarak durur.
  */
 class Ipv4BlockPlan
 {
     /**
+     * Blok açık gelir: uuid'i $openBlock ise (bölmeden dönüş) ya da
+     * seçili kayıt ($selected) onun parçasıysa.
+     *
      * @param  Collection<int, IpAddress>  $records
-     * @param  string|null  $openUuid  Açık gelecek bloğun uuid'i (bölmeden dönüş).
-     * @return array{blocks: list<array<string, mixed>>, others: list<IpAddress>, skipped: int}
+     * @return array{blocks: list<array<string, mixed>>, others: list<IpAddress>}
      */
-    public function build(Collection $records, ?string $openUuid = null): array
+    public function build(Collection $records, ?string $openBlock = null, ?string $selected = null): array
     {
         $blocks = [];
         $rest = [];
-        $skipped = 0;
 
         foreach ($records as $record) {
             $start = $this->ipv4($record->address);
 
             match (true) {
-                $start === null => $skipped++,
+                $start === null => $rest[] = ['start' => null, 'record' => $record],
                 $record->prefix === Ipv4BlockRules::BLOCK_PREFIX => $blocks[] = ['start' => $start & $this->mask(24), 'record' => $record],
                 default => $rest[] = ['start' => $start & $this->mask($record->prefix), 'record' => $record],
             };
@@ -47,11 +48,11 @@ class Ipv4BlockPlan
 
         /* Kayıtlar sort_key sırasıyla gelir; aynı /24 iki grupta varsa ikisi de çizilir. */
         $rows = array_map(
-            fn (array $b): array => $this->block($b, $parts[$this->key($b['record'], $b['start'])] ?? [], $openUuid),
+            fn (array $b): array => $this->block($b, $parts[$this->key($b['record'], $b['start'])] ?? [], $openBlock, $selected),
             $blocks,
         );
 
-        return ['blocks' => $rows, 'others' => $others, 'skipped' => $skipped];
+        return ['blocks' => $rows, 'others' => $others];
     }
 
     /**
@@ -59,7 +60,7 @@ class Ipv4BlockPlan
      * "diğerleri"ne gider.
      *
      * @param  list<array{start: int, record: IpAddress}>  $blocks
-     * @param  list<array{start: int, record: IpAddress}>  $rest
+     * @param  list<array{start: int|null, record: IpAddress}>  $rest  IPv6'da start null.
      * @return array{0: array<string, list<array{start: int, record: IpAddress}>>, 1: list<IpAddress>}
      */
     private function attach(array $blocks, array $rest): array
@@ -69,9 +70,9 @@ class Ipv4BlockPlan
         $others = [];
 
         foreach ($rest as $entry) {
-            $key = $this->key($entry['record'], $entry['start'] & $this->mask(24));
+            $key = $entry['start'] === null ? null : $this->key($entry['record'], $entry['start'] & $this->mask(24));
 
-            if ($entry['record']->prefix > Ipv4BlockRules::BLOCK_PREFIX && isset($keys[$key])) {
+            if ($key !== null && $entry['record']->prefix > Ipv4BlockRules::BLOCK_PREFIX && isset($keys[$key])) {
                 $parts[$key][] = $entry;
             } else {
                 $others[] = $entry['record'];
@@ -86,7 +87,7 @@ class Ipv4BlockPlan
      * @param  list<array{start: int, record: IpAddress}>  $parts
      * @return array<string, mixed>
      */
-    private function block(array $block, array $parts, ?string $openUuid): array
+    private function block(array $block, array $parts, ?string $openBlock, ?string $selected): array
     {
         usort($parts, fn (array $a, array $b): int => [$a['start'], $a['record']->prefix] <=> [$b['start'], $b['record']->prefix]);
 
@@ -99,7 +100,8 @@ class Ipv4BlockPlan
             'partsLabel' => count($rows) > 0 ? count($rows).' parça' : 'Bölünmedi',
             'used' => $used,
             ...$this->state($used, 256),
-            'open' => $openUuid !== null && $block['record']->uuid === $openUuid,
+            'open' => ($openBlock !== null && $block['record']->uuid === $openBlock)
+                || ($selected !== null && in_array($selected, array_map(fn (array $p): string => (string) $p['record']->uuid, $parts), true)),
             'parts' => $rows,
         ];
     }

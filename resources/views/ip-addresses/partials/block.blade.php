@@ -1,13 +1,13 @@
 {{--
-    Blok planında bir /24 (bkz. Ipv4BlockPlan). Bölünmüş blok katlanır ve
-    KAPALI gelir; yalnız soldaki ok açar (bkz. panel-custom.css, BLOK PLANI).
-    Bölünmemiş blok tek satırdır, yanında "Böl" durur.
+    Listede bir /24 blok (bkz. Ipv4BlockPlan). Satırın tamamı bağlantıdır,
+    ayrıntıyı sağda açar. Bölünmüş bloğun parçalarını YALNIZ soldaki ok
+    açar; blok kapalı gelir (bkz. panel-custom.css, BLOK LİSTESİ).
 --}}
 @if ($block['parts'] !== [])
     <details class="block-node" @if ($block['open']) open @endif>
-        <summary class="block-node__row">
-            <span class="block-node__toggle" aria-hidden="true"></span>
-            @include('ip-addresses.partials.plan-row')
+        <summary class="grid-row address-row"
+                 @if ($selected && $selected['uuid'] === $block['record']->uuid) aria-selected="true" @endif>
+            @include('ip-addresses.partials.block-row')
         </summary>
 
         <div class="block-node__parts">
@@ -41,26 +41,11 @@
                     </tbody>
                 </table>
             </div>
-
-            @if ($block['canUnsplit'])
-                <div class="block-node__foot">
-                    <x-ui.delete-form :action="route('ip-addresses.unsplit', $block['record'])"
-                                      confirm="{{ $block['notation'] }} bölmesi kaldırılacak; {{ count($block['parts']) }} parça adlarıyla birlikte silinecek."
-                                      title="Bölmeyi kaldır"
-                                      label="Bölmeyi kaldır"
-                                      verify="{{ $block['notation'] }}" />
-                </div>
-            @endif
         </div>
     </details>
 @else
-    <div class="block-node__row">
-        <span class="block-node__toggle block-node__toggle--none" aria-hidden="true"></span>
-        @include('ip-addresses.partials.plan-row')
-
-        @if ($block['canSplit'])
-            <a href="{{ route('ip-addresses.plan', ['grup' => $selectedGroup?->uuid, 'pencere' => 'bol', 'blok' => $block['record']->uuid]) }}"
-               class="btn btn--sm">Böl</a>
-        @endif
+    <div class="grid-row address-row"
+         @if ($selected && $selected['uuid'] === $block['record']->uuid) aria-selected="true" @endif>
+        @include('ip-addresses.partials.block-row')
     </div>
 @endif

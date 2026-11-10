@@ -44,37 +44,16 @@
 }
 
 /*
- * BLOK PLANI (ip-addresses/plan): /24 bloklar ve altlarında bölme parçaları.
- * Kardeş panellerde ağaç bileşeni yok; katlanır panelin (collapsible.css)
- * oku ve renkleri aynen alınır, burada satır düzeni ve tıklama alanı
- * tanımlanır.
+ * BLOK LİSTESİ (ip-addresses/index): bölünmüş /24 blok listede katlanır
+ * satırdır, parçaları altında tablo olarak durur. Kardeş panellerde ağaç
+ * bileşeni yok; katlanır panelin (collapsible.css) oku ve renkleri aynen
+ * alınır, satır düzeni address-row'dur.
  *
- * Blok yalnız SOLDAKİ OKLA açılır: satırın geri kalanı bağlantı taşır ve
- * yanlışlıkla 256 satırlık tablo açmamalı. Bunun için betik yazılmaz;
- * <summary> tıklamayı geçirmez, yalnız ok ve bağlantılar alır. Klavyede
- * <summary> odaklanır ve Enter/Boşluk yine açar.
+ * İKİ AYRI TIKLAMA: satırın kendisi bağlantıdır (credential-row__link
+ * katmanı) ve ayrıntıyı sağda açar; parçaları yalnız soldaki ok açar. Bunun
+ * için betik yazılmaz: <summary> tıklamayı geçirmez, bağlantı katmanı ve
+ * onun üstündeki ok alır. Klavyede <summary> odaklanır, Enter/Boşluk açar.
  */
-.block-plan {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-4);
-    padding: var(--space-4);
-}
-
-.block-node__row {
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-    min-width: 0;
-    padding: var(--space-2) var(--space-4) var(--space-2) var(--space-2);
-    border-top: 1px solid var(--color-line);
-}
-
-.panel > .block-node:first-child > .block-node__row,
-.panel > .block-node__row:first-child {
-    border-top: 0;
-}
-
 .block-node > summary {
     list-style: none;
     pointer-events: none;
@@ -84,19 +63,28 @@
     display: none;
 }
 
-.block-node > summary a,
-.block-node__toggle {
+.block-node > summary a {
     pointer-events: auto;
 }
 
-/* Okun tıklama alanı: üçgenin kendisi parmakla vurulamayacak kadar küçük. */
+.block-node__address {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+}
+
+/* Ok bağlantı katmanının ÜSTÜNDE; tıklama alanı üçgenden büyük. */
 .block-node__toggle {
+    position: relative;
+    z-index: 1;
     display: inline-flex;
     flex-shrink: 0;
     align-items: center;
     justify-content: center;
+    margin-left: calc(var(--space-2) * -1);
     padding: var(--space-2);
     cursor: pointer;
+    pointer-events: auto;
 }
 
 .block-node__toggle::before {
@@ -111,7 +99,7 @@
 
 /* Bölünmemiş blokta ok yok; yeri boş kalır ki adresler alt alta hizalansın. */
 .block-node__toggle--none {
-    cursor: default;
+    pointer-events: none;
 }
 
 .block-node__toggle--none::before {
@@ -122,32 +110,10 @@
     transform: rotate(90deg);
 }
 
-.block-node__address {
-    flex-shrink: 0;
-}
-
-.block-node__records {
-    flex: 1;
-    min-width: 0;
-}
-
-.block-node__size {
-    flex-shrink: 0;
-}
-
 .block-node__parts {
     padding: 0 var(--space-4) var(--space-4);
 }
 
-.block-node__foot {
-    display: flex;
-    justify-content: flex-end;
-    margin-top: var(--space-3);
-}
-
 @media (max-width: 720px) {
-    .block-plan { padding: var(--space-3); }
-    .block-node__row { padding: var(--space-2) var(--space-3) var(--space-2) var(--space-1); }
     .block-node__parts { padding: 0 var(--space-3) var(--space-3); }
-    .block-node__size { display: none; }
 }

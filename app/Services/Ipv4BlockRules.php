@@ -52,7 +52,7 @@ class Ipv4BlockRules
             $record !== null && $this->isBlock($record) && $this->parts($record)->isNotEmpty() => 'Bu blok bölünmüş; '
                 .'adresini ya da grubunu değiştirmek için önce bölmesini kaldırın.',
             $parsed->prefix !== self::BLOCK_PREFIX => 'IPv4’te yalnız /'.self::BLOCK_PREFIX.' blok eklenir; '
-                .'küçük parçalar Blok planı’nda blok bölünerek açılır.',
+                .'küçük parçalar bloğun ayrıntısındaki “Böl” ile açılır.',
             default => null,
         };
     }

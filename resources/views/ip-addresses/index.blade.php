@@ -44,8 +44,6 @@
 
                 <span class="spacer"></span>
 
-                <a href="{{ route('ip-addresses.plan', ['grup' => $selectedGroup?->uuid]) }}" class="btn btn--sm">Blok planı</a>
-
                 @if ($canCreate)
                     <a href="{{ route('ip-addresses.index', ['grup' => $selectedGroup?->uuid, 'pencere' => 'ekle']) }}"
                        class="btn btn--primary btn--sm" data-modal-open="record-add">Yeni adres</a>
@@ -107,6 +105,19 @@
                            class="btn btn--sm" data-modal-open="record-edit">Düzenle</a>
                     @endif
 
+                    @if ($selected['canSplit'])
+                        <a href="{{ route('ip-addresses.index', ['grup' => $selectedGroup?->uuid, 'q' => $query ?: null, 'kayit' => $selected['uuid'], 'pencere' => 'bol']) }}"
+                           class="btn btn--sm" data-modal-open="block-split">Böl</a>
+                    @endif
+
+                    @if ($selected['canUnsplit'])
+                        <x-ui.delete-form :action="route('ip-addresses.unsplit', $selected['model'])"
+                                          confirm="{{ $selected['notation'] }} bölmesi kaldırılacak; {{ $selected['partCount'] }} parça adlarıyla birlikte silinecek."
+                                          title="Bölmeyi kaldır"
+                                          label="Bölmeyi kaldır"
+                                          verify="{{ $selected['notation'] }}" />
+                    @endif
+
                     @if ($selected['canDelete'])
                         <x-ui.delete-form :action="route('ip-addresses.destroy', $selected['model'])"
                                           confirm="{{ $selected['notation'] }} silinecek."
@@ -119,7 +130,7 @@
     </div>
 
     {{-- Aynı anda tek pencere: biri doğrulama hatasıyla açıksa diğeri çizilmez. --}}
-    @if ($canCreate && $window !== 'duzenle')
+    @if ($canCreate && ! in_array($window, ['duzenle', 'bol'], true))
         <x-ip-addresses.modal id="record-add"
                               window="ekle"
                               title="Yeni adres"
@@ -131,7 +142,7 @@
                               :sub-group-map="$subGroupMap" />
     @endif
 
-    @if ($selected && $selected['canUpdate'] && $window !== 'ekle')
+    @if ($selected && $selected['canUpdate'] && ! in_array($window, ['ekle', 'bol'], true))
         <x-ip-addresses.modal id="record-edit"
                               window="duzenle"
                               :title="$selected['notation']"
@@ -143,5 +154,26 @@
                               :group-options="$updateGroupOptions"
                               :sub-group-options="$subGroupOptions"
                               :sub-group-map="$subGroupMap" />
+    @endif
+
+    {{-- Böl: /24'ü parçalara ayırır (bkz. Ipv4SplitLayout). --}}
+    @if ($selected && $selected['canSplit'] && ! in_array($window, ['ekle', 'duzenle'], true))
+        <x-ui.modal id="block-split" :title="$selected['notation'].' bölünecek'" :open="$window === 'bol'">
+            <form method="POST" action="{{ route('ip-addresses.split', $selected['model']) }}" autocomplete="off" data-inline>
+                @csrf
+                <input type="hidden" name="_pencere" value="bol">
+
+                <div class="modal__body">
+                    <x-ui.errors class="modal__alert" />
+
+                    <x-form.field name="layout" label="Parçalar"
+                                  hint="Boyları blok başından sırayla yazın; son boy bloğun sonuna kadar tekrarlanır. 29 = 32 tane /29; 28x2 29 = iki /28, kalanı /29; 29x10 28x2 27 … gibi karışık da olur. Bölme tek kattır.">
+                        <x-form.input name="layout" mono required maxlength="500" spellcheck="false" />
+                    </x-form.field>
+                </div>
+
+                <x-ui.modal-actions submit="Böl" />
+            </form>
+        </x-ui.modal>
     @endif
 </x-layout.app>

@@ -5,7 +5,6 @@ declare(strict_types=1);
 use App\Http\Controllers\Account\ProfileController;
 use App\Http\Controllers\ActivityLogController;
 use App\Http\Controllers\AddressGroupController;
-use App\Http\Controllers\AddressPlanController;
 use App\Http\Controllers\AddressSplitController;
 use App\Http\Controllers\ApiTokenController;
 use App\Http\Controllers\Auth\CenterLoginController;
@@ -77,9 +76,6 @@ Route::middleware('auth')->group(function (): void {
      * Ekleme ve düzenleme formunun AYRI SAYFASI YOKTUR: ikisi de liste
      * ekranının üstünde pencere olarak açılır (?pencere=ekle / ?pencere=duzenle).
      */
-    /* IPv4 blok planı: /24 blokların ağacı. Kaynaktan ÖNCE, "plan" bir adres sanılmasın. */
-    Route::get('addresses/plan', AddressPlanController::class)->name('ip-addresses.plan');
-
     /* /24 bloğu parçalara böl / bölmeyi kaldır (bkz. Ipv4BlockRules). */
     Route::controller(AddressSplitController::class)->group(function (): void {
         Route::post('addresses/{ipAddress}/split', 'store')->name('ip-addresses.split');

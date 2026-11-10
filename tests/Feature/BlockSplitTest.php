@@ -73,7 +73,7 @@ class BlockSplitTest extends TestCase
     {
         $this->actingAs($this->bolen())
             ->post(route('ip-addresses.split', $this->blok), ['layout' => self::KARISIK])
-            ->assertRedirect(route('ip-addresses.plan', ['grup' => $this->grup->uuid, 'blok' => $this->blok->uuid]))
+            ->assertRedirect(route('ip-addresses.index', ['grup' => $this->grup->uuid, 'kayit' => $this->blok->uuid, 'blok' => $this->blok->uuid]))
             ->assertSessionHasNoErrors();
 
         $parcalar = $this->parcalar();
@@ -99,18 +99,37 @@ class BlockSplitTest extends TestCase
         $this->assertSame([], $this->parcalar());
     }
 
+    /** Son boy bloğun sonuna kadar tekrarlanır: yalnız "29" 32 tane /29 demektir. */
     #[Test]
-    public function blogu_tam_doldurmayan_ya_da_asan_duzen_reddedilir(): void
+    public function son_boy_blogun_sonuna_kadar_tekrarlanir(): void
     {
-        $kullanici = $this->bolen();
+        $this->actingAs($this->bolen())
+            ->post(route('ip-addresses.split', $this->blok), ['layout' => '29'])
+            ->assertSessionHasNoErrors();
 
-        $this->actingAs($kullanici)
-            ->post(route('ip-addresses.split', $this->blok), ['layout' => '25'])
-            ->assertSessionHasErrors(['layout' => 'Parçalar 128 adres ediyor; blok tam 256 adres olmalı (eksik 128).']);
+        $parcalar = $this->parcalar();
+        $this->assertCount(32, $parcalar);
+        $this->assertSame(['198.51.100.0/29', '198.51.100.248/29'], [$parcalar[0], $parcalar[31]]);
+    }
 
-        $this->actingAs($kullanici)
+    #[Test]
+    public function karisik_duzenin_kalani_son_boyla_dolar(): void
+    {
+        $this->actingAs($this->bolen())
+            ->post(route('ip-addresses.split', $this->blok), ['layout' => '26 28x2 29'])
+            ->assertSessionHasNoErrors();
+
+        $parcalar = $this->parcalar();
+        $this->assertCount(3 + 20, $parcalar);
+        $this->assertSame(['198.51.100.0/26', '198.51.100.64/28', '198.51.100.80/28', '198.51.100.96/29'], array_slice($parcalar, 0, 4));
+    }
+
+    #[Test]
+    public function blogu_asan_duzen_reddedilir(): void
+    {
+        $this->actingAs($this->bolen())
             ->post(route('ip-addresses.split', $this->blok), ['layout' => '25x3'])
-            ->assertSessionHasErrors('layout');
+            ->assertSessionHasErrors(['layout' => 'Parçalar /24’ü aşıyor: toplam 384 adres, blok 256 adres.']);
 
         $this->assertSame([], $this->parcalar());
     }

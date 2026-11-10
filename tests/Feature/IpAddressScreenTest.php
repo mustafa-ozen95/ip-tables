@@ -348,7 +348,7 @@ class IpAddressScreenTest extends TestCase
         foreach (['192.0.2.8/29', '192.0.2.10', '198.51.100.0/22'] as $girdi) {
             $this->actingAs($kullanici)
                 ->post(route('ip-addresses.store'), $this->form($grup, $girdi))
-                ->assertSessionHasErrors(['address' => 'IPv4’te yalnız /24 blok eklenir; küçük parçalar Blok planı’nda blok bölünerek açılır.']);
+                ->assertSessionHasErrors(['address' => 'IPv4’te yalnız /24 blok eklenir; küçük parçalar bloğun ayrıntısındaki “Böl” ile açılır.']);
         }
 
         $this->assertDatabaseCount('ip_addresses', 0);

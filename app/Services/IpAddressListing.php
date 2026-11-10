@@ -16,13 +16,21 @@ use Illuminate\Http\Request;
 /**
  * Ana ekranın verisi. Blade yalnız buradan geleni çizer.
  *
+ * IPv4 /24 bloklar listede katlanır satırdır, parçaları altında (bkz.
+ * Ipv4BlockPlan); diğer kayıtlar düz satırdır. Arama sonucu düz listedir:
+ * eşleşen parça, bloğu eşleşmese de görünmeli.
+ *
  * Her sorgu kullanıcıya göre DARALTILIR (visibleTo): görülmeyen grubun
  * adresi ne listede, ne sayıda, ne ayrıntıda görünür. Sayfa parametreleri
  * (grup, kayıt) uuid taşır.
  */
 class IpAddressListing
 {
-    public function __construct(private UserPermissionResolver $resolver) {}
+    public function __construct(
+        private UserPermissionResolver $resolver,
+        private Ipv4BlockPlan $plan,
+        private Ipv4BlockRules $rules,
+    ) {}
 
     /** @return array<string, mixed> */
     public function forRequest(Request $request): array
@@ -43,7 +51,7 @@ class IpAddressListing
             'allCount' => $groups->sum('ip_addresses_count'),
             'selectedGroup' => $selectedGroup,
             'query' => $query,
-            'sections' => $this->sections($user, $selectedGroup, $query),
+            'sections' => $this->sections($user, $selectedGroup, $query, $request->string('blok')->toString() ?: null, $selected['uuid'] ?? null),
             'selected' => $selected,
             'window' => $window,
             'canCreate' => $creatable !== [],
@@ -56,33 +64,44 @@ class IpAddressListing
 
     /**
      * Listedeki bölümler. Grup seçiliyse alt gruplarına göre bölünür; "Hepsi"
-     * tek bölümdür ve satırda grubun adı da yazar.
+     * tek bölümdür ve satırda grubun adı da yazar. Parça, alt grubu ne olursa
+     * olsun bloğunun altında durur.
      *
-     * @return array<int, array{title: string|null, rows: Collection<int, IpAddress>}>
+     * @return array<int, array{title: string|null, blocks: list<array<string, mixed>>, rows: Collection<int, IpAddress>}>
      */
-    private function sections(User $user, ?AddressGroup $group, string $query): array
+    private function sections(User $user, ?AddressGroup $group, string $query, ?string $openBlock, ?string $selected): array
     {
-        $rows = IpAddress::query()->visibleTo($user)
+        $records = IpAddress::query()->visibleTo($user)
             ->when($group, fn ($q, AddressGroup $g) => $q->whereBelongsTo($g, 'group'))
             ->search($query)
             ->with(['group', 'subGroup'])
             ->ordered()
             ->get();
 
-        if ($group === null || $group->subGroups->isEmpty()) {
-            return [['title' => null, 'rows' => $rows]];
+        if ($query !== '') {
+            return [['title' => null, 'blocks' => [], 'rows' => $records]];
         }
 
-        $byGroup = $rows->groupBy('sub_group_id');
+        $plan = $this->plan->build($records, $openBlock, $selected);
+        $rows = new Collection($plan['others']);
 
-        $sections = $group->subGroups
-            ->map(fn (SubGroup $sub): array => ['title' => $sub->name, 'rows' => $byGroup->get($sub->id, new Collection)])
-            ->all();
+        if ($group === null || $group->subGroups->isEmpty()) {
+            return [['title' => null, 'blocks' => $plan['blocks'], 'rows' => $rows]];
+        }
 
-        $sections[] = ['title' => 'Alt grupsuz', 'rows' => $byGroup->get('', new Collection)];
+        $blocksBy = collect($plan['blocks'])->groupBy(fn (array $b): string => (string) $b['record']->sub_group_id);
+        $rowsBy = $rows->groupBy(fn (IpAddress $r): string => (string) $r->sub_group_id);
+        $section = fn (?string $title, string $key): array => [
+            'title' => $title,
+            'blocks' => $blocksBy->get($key, collect())->all(),
+            'rows' => $rowsBy->get($key, new Collection),
+        ];
 
-        return array_values(array_filter($sections, fn (array $s): bool => $s['rows']->isNotEmpty()))
-            ?: [['title' => null, 'rows' => new Collection]];
+        $sections = $group->subGroups->map(fn (SubGroup $sub): array => $section($sub->name, (string) $sub->id))->all();
+        $sections[] = $section('Alt grupsuz', '');
+
+        return array_values(array_filter($sections, fn (array $s): bool => $s['blocks'] !== [] || $s['rows']->isNotEmpty()))
+            ?: [['title' => null, 'blocks' => [], 'rows' => new Collection]];
     }
 
     /** @return array<string, mixed>|null */
@@ -112,7 +131,28 @@ class IpAddressListing
             ],
             'description' => $model->description,
             'canUpdate' => $user->can('update', $model),
-            'canDelete' => $user->can('delete', $model),
+            ...$this->blockActions($user, $model),
+        ];
+    }
+
+    /**
+     * Silme, böl ve bölmeyi kaldır düğmeleri yalnız isteğin de geçireceği
+     * durumda çizilir: bölünmüş bloğun ve parçanın "Sil"i reddedilecekti
+     * (bkz. Ipv4BlockRules, SplitIpAddressRequest).
+     *
+     * @return array{canDelete: bool, canSplit: bool, canUnsplit: bool, partCount: int}
+     */
+    private function blockActions(User $user, IpAddress $model): array
+    {
+        $parts = $this->rules->isBlock($model) ? $this->rules->parts($model)->count() : 0;
+        $group = $model->address_group_id;
+
+        return [
+            'canDelete' => $user->can('delete', $model) && $this->rules->deleteError($model) === null,
+            'canSplit' => $this->rules->isBlock($model) && $parts === 0 && $user->can('update', $model)
+                && $this->resolver->allows($user, IpAddressPolicy::RESOURCE, 'create', $group),
+            'canUnsplit' => $parts > 0 && $user->can('delete', $model),
+            'partCount' => $parts,
         ];
     }
 
@@ -124,6 +164,7 @@ class IpAddressListing
         return match ($window) {
             'ekle' => 'ekle',
             'duzenle' => $selected !== null && $selected['canUpdate'] ? 'duzenle' : null,
+            'bol' => $selected !== null && $selected['canSplit'] ? 'bol' : null,
             default => null,
         };
     }

@@ -4,6 +4,10 @@
     </div>
 @endif
 
+@foreach ($section['blocks'] as $block)
+    @include('ip-addresses.partials.block')
+@endforeach
+
 @forelse ($section['rows'] as $row)
     <div class="grid-row address-row"
          @if ($selected && $selected['uuid'] === $row->uuid) aria-selected="true" @endif>
@@ -25,6 +29,8 @@
         <span class="address-row__description text-sm text-muted truncate">{{ $row->description ?? '' }}</span>
     </div>
 @empty
-    <x-ui.empty :title="$query ? 'Eşleşen adres yok' : 'Adres yok'"
-                :text="$query ? 'Başka bir arama deneyin.' : 'Bu gruba henüz adres eklenmemiş.'" />
+    @if ($section['blocks'] === [])
+        <x-ui.empty :title="$query ? 'Eşleşen adres yok' : 'Adres yok'"
+                    :text="$query ? 'Başka bir arama deneyin.' : 'Bu gruba henüz adres eklenmemiş.'" />
+    @endif
 @endforelse
