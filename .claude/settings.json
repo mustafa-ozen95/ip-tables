@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(./vendor/**)",
+      "Read(./**/node_modules/**)",
+      "Read(./**/.git/**)",
+      "Read(./**/storage/logs/**)",
+      "Read(./**/storage/framework/**)",
+      "Read(./**/public/build/**)",
+      "Read(./**/*.lock)",
+      "Read(./**/.env)",
+      "Read(./**/.env.local)",
+      "Read(./**/.env.*.local)",
+      "Read(./**/.env.production)",
+      "Read(./**/.env.prod)",
+      "Read(./**/.env.staging)",
+      "Read(./**/.env.testing)",
+      "Read(./**/.env.backup)",
+      "Read(./**/.env.bak)",
+      "Read(./**/.env.old)"
+    ]
+  }
+}

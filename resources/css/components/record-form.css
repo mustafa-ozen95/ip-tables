@@ -1,0 +1,118 @@
+/*
+ * Kayıt formu: koşullu alanlar ve "Gelişmiş" bölümü.
+ *
+ * Alanların görünürlüğü conditional-field.js'te; burada yalnızca yerleşim var.
+ * Pencere içinde paneller başlıklı bölüm gibi durur (bkz. modal.css);
+ * "Gelişmiş" de onlarla aynı çizgiyle ayrılır.
+ */
+
+/* Kutunun altında açılan alanlar kutuya bağlı okunmalı: az boşluk, girinti yok. */
+.record-form__inner {
+    margin-top: var(--space-3);
+}
+
+.record-form__inner:not(.is-hidden) {
+    animation: record-form-reveal 160ms ease-out;
+}
+
+/* Bütün alanları gizlenmiş satır (bkz. conditional-field.js). */
+.field-row.is-empty {
+    display: none;
+}
+
+[data-manual-account] {
+    margin-top: var(--space-4);
+}
+
+.record-form__advanced {
+    margin-top: var(--space-4);
+    padding-top: var(--space-3);
+    border-top: 1px solid var(--color-line);
+}
+
+.record-form__advanced > summary {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-3);
+    padding: var(--space-2) 0;
+    cursor: pointer;
+    list-style: none;
+}
+
+.record-form__advanced > summary::-webkit-details-marker { display: none; }
+
+/* Açılır ok: metin karakteri değil, dönen bir üçgen. */
+.record-form__advanced > summary::before {
+    content: '';
+    width: 0;
+    height: 0;
+    border-top: 5px solid transparent;
+    border-bottom: 5px solid transparent;
+    border-left: 6px solid var(--color-text-muted);
+    transition: transform 150ms ease;
+}
+
+.record-form__advanced[open] > summary::before {
+    transform: rotate(90deg);
+}
+
+.record-form__advanced-title {
+    font-weight: 600;
+    color: var(--color-text);
+}
+
+.record-form__advanced-body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    padding-top: var(--space-3);
+}
+
+.record-form__advanced-body > .field { margin-top: 0; }
+
+@keyframes record-form-reveal {
+    from { opacity: 0; transform: translateY(-2px); }
+    to   { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .record-form__inner:not(.is-hidden) { animation: none; }
+    .record-form__advanced > summary::before { transition: none; }
+}
+
+/*
+ * Rol istisnaları: rol başına tek satır (bkz. credentials/form). Dar ve
+ * sade — genel .table'ın dar ekranda kartlaşan biçimi burada istenmiyor.
+ */
+.role-exception {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--text-sm);
+}
+
+.role-exception th,
+.role-exception td {
+    padding: var(--space-2) var(--space-3);
+    border-bottom: 1px solid var(--color-line);
+    text-align: center;
+    vertical-align: middle;
+}
+
+.role-exception thead th {
+    font-weight: 500;
+    color: var(--color-text-muted);
+}
+
+.role-exception th[scope='row'],
+.role-exception thead th:first-child {
+    text-align: left;
+    font-weight: 500;
+}
+
+.role-exception td:nth-child(2) {
+    width: 10rem;
+}
+
+.role-exception .select {
+    width: 100%;
+}

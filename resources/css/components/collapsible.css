@@ -1,0 +1,75 @@
+/*
+ * KATLANIR PANEL — grup listesi.
+ *
+ * Hepsi birden açık olunca ekran, birkaç kayıtta bile okunamaz bir yığına
+ * dönüşür. Günlük iş "neler var" sorusudur; ayrıntı nadiren gerekir.
+ *
+ * Panel kabuğunu taklit eder ki liste, sayfanın geri kalanıyla aynı dilde
+ * dursun.
+ */
+.collapsible {
+    background: var(--color-surface);
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-lg);
+}
+
+.collapsible + .collapsible {
+    margin-top: var(--space-4);
+}
+
+.collapsible__title {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-4);
+    cursor: pointer;
+    list-style: none;
+}
+
+.collapsible__title::-webkit-details-marker {
+    display: none;
+}
+
+/* Oku kendimiz çiziyoruz: tarayıcının üçgeni her platformda farklı boyda. */
+.collapsible__title::before {
+    content: '';
+    flex-shrink: 0;
+    width: 0;
+    height: 0;
+    border-left: 4px solid var(--color-text-muted);
+    border-top: 4px solid transparent;
+    border-bottom: 4px solid transparent;
+    transition: transform var(--transition-fast);
+}
+
+.collapsible[open] > .collapsible__title::before {
+    transform: rotate(90deg);
+}
+
+.collapsible__name {
+    font-weight: var(--weight-semibold);
+}
+
+.collapsible__extra {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+/* Başlıktaki eylemler sağa yaslanır; tıklanınca panel açılıp kapanmaz. */
+.collapsible__actions {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.collapsible__body {
+    border-top: 1px solid var(--color-line);
+}
+
+.collapsible__body .table {
+    width: 100%;
+}

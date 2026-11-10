@@ -1,0 +1,153 @@
+# =============================================================================
+#  ip-tables — IP Adres Tabloları — Compose (compose-spec.io)
+# =============================================================================
+#  Her ortamda aynı dosya: `docker compose up -d --build`, NineDeploy, Coolify,
+#  Dokploy, Portainer... Ayarların hepsi ortamdan gelir (.env ya da platformun
+#  değişken ekranı); liste ve açıklamalar .env.example'da.
+#
+#      cp .env.example .env      # en az APP_URL, DB_PASSWORD, ADMIN_EMAIL
+#      docker compose up -d --build
+#
+#  HTTP portu dışarı AÇILMAZ: alan adını ve TLS'i önündeki vekil (platformun
+#  kendisi ya da Caddy/nginx) verir, panele konteyner ağından 80'den ulaşır.
+#  Vekilsiz deneme için docker-compose.override.example.yml.
+#
+#  Servisler: panel (nginx + php-fpm + işçi + zamanlayıcı), db (MariaDB),
+#  redis (önbellek, oturum, kuyruk; kalıcılık kapalı).
+#
+#  Dışarıdaki ya da platformun yönettiği bir veritabanı: DB_HOST ve kimlik
+#  bilgilerini verin, DB_REPLICAS=0 ile db servisi hiç kalkmaz.
+#
+#  Adlar: konteyner ve hacimler STACK_PREFIX ile başlar (varsayılan ip-tables). Aynı
+#  sunucuda ikinci kurulum STACK_PREFIX'i değiştirir.
+# =============================================================================
+
+services:
+  panel:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    image: ${STACK_PREFIX:-ip-tables}:local
+    container_name: ${STACK_PREFIX:-ip-tables}
+    restart: unless-stopped
+    # Kuyruktaki iş (ör. denetim zinciri doğrulaması) yarıda kesilmesin.
+    stop_grace_period: 15m
+    expose: ["80"]
+    # Tanımsız değişken konteynere GEÇMEZ (boş değer de değil): varsayılanlar
+    # başlatıcıda ve config/ altında.
+    environment:
+      - APP_NAME
+      - APP_ENV
+      - APP_DEBUG
+      - APP_KEY
+      - APP_URL
+      - APP_LOCALE
+      - APP_TIMEZONE
+      - TRUSTED_PROXIES
+      - DB_HOST
+      - DB_PORT
+      - DB_DATABASE
+      - DB_USERNAME
+      - DB_PASSWORD
+      - REDIS_HOST
+      - REDIS_PORT
+      - REDIS_PASSWORD
+      - ADMIN_EMAIL
+      - ADMIN_NAME
+      - ADMIN_PASSWORD
+      - LOGIN_THROTTLE
+      - IP_LOCAL_RANGES
+      - API_TOKEN_PREFIX
+      - ACTIVITY_CHAIN_KEY
+      - IDENTITY_ENABLED
+      - IDENTITY_URL
+      - IDENTITY_CLIENT_ID
+      - IDENTITY_CLIENT_SECRET
+      - IDENTITY_REDIRECT_URI
+      - IDENTITY_NOTIFY_SECRET
+      - IDENTITY_NAME
+      - IDENTITY_CA_CERT
+      - IDENTITY_VERIFY_MINUTES
+      - IDENTITY_ADMIN_TAKEOVER
+      - THEME_COOKIE_DOMAIN
+      - UPDATE_TOKEN
+      - UPDATE_HOOK_URL
+      - MAIL_MAILER
+      - MAIL_HOST
+      - MAIL_PORT
+      - MAIL_USERNAME
+      - MAIL_PASSWORD
+      - MAIL_SCHEME
+      - MAIL_FROM_ADDRESS
+      - MAIL_FROM_NAME
+    volumes:
+      # ⚠ APP_KEY ile BİRLİKTE yedeklenir: şifreli alanlar (merkez sırları,
+      # jetonlar) anahtarsız okunamaz.
+      - storage:/uygulama/storage/app
+      - logs:/uygulama/storage/logs
+      # TLS sertifikası: sunucudaki ortak sertifika ajanının durumu (salt
+      # okunur) ve panelin tur isteği bıraktığı dizin. Sertifikayı panel
+      # almaz; ajan alır ve vekile kurar (bkz. Ayarlar → Sertifika).
+      - /etc/dc:/etc/dc:ro
+      - /etc/dc/sertifika-panel:/etc/dc/sertifika-panel
+    depends_on:
+      db:
+        condition: service_healthy
+        required: false
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1/up"]
+      interval: 30s
+      timeout: 5s
+      start_period: 90s
+      retries: 3
+
+  db:
+    image: mariadb:11.4
+    container_name: ${STACK_PREFIX:-ip-tables}-db
+    restart: unless-stopped
+    # 0: dışarıdaki ya da platformun veritabanı kullanılıyor (DB_HOST).
+    deploy:
+      replicas: ${DB_REPLICAS:-1}
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"]
+    environment:
+      MARIADB_DATABASE: ${DB_DATABASE:-ip_tables}
+      MARIADB_USER: ${DB_USERNAME:-ip_tables}
+      MARIADB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD gerekli (.env.example)}
+      MARIADB_RANDOM_ROOT_PASSWORD: "1"
+      MARIADB_AUTO_UPGRADE: "1"
+    volumes:
+      - database:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      start_period: 60s
+      retries: 6
+
+  redis:
+    image: redis:7.4-alpine
+    container_name: ${STACK_PREFIX:-ip-tables}-redis
+    restart: unless-stopped
+    # Kalıcılık KAPALI: burada yalnız önbellek, oturum ve kuyruk durur.
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+
+networks:
+  default:
+    # Ağ yalıtımı: true iken konteynerler KYM'ye ve dışarıya bağlanamaz
+    # (taşıma ya da deneme kurulumu). Port yayınları da dışarıdan erişilmez.
+    internal: ${NETWORK_ISOLATED:-false}
+
+volumes:
+  storage:
+    name: ${STACK_PREFIX:-ip-tables}_storage
+  logs:
+    name: ${STACK_PREFIX:-ip-tables}_logs
+  database:
+    name: ${STACK_PREFIX:-ip-tables}_database

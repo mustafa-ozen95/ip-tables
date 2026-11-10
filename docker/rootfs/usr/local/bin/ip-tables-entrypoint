@@ -1,0 +1,484 @@
+#!/bin/bash
+# =============================================================================
+#  Konteyner başlatıcı
+# =============================================================================
+#  Sırayla: dizinler → yapılandırma → veritabanı → göçler → süreç yöneticisi.
+#
+#  Veritabanı ve redis AYRI servislerdir (docker-compose.yml: db, redis);
+#  imajda ikisi de yok. Adresleri ortamdan gelir (DB_*, REDIS_*), varsayılan
+#  compose'taki servis adları. Panel yalnız HTTP dinler (80): TLS'i önündeki
+#  vekil bitirir.
+# =============================================================================
+set -euo pipefail
+
+UYGULAMA=/uygulama
+PHP=/usr/bin/php
+CONFD=/etc/supervisor/conf.d
+
+bilgi() { printf '\033[1;34m[ip-tables]\033[0m %s\n' "$*"; }
+uyari() { printf '\033[1;33m[ip-tables]\033[0m %s\n' "$*" >&2; }
+hata()  { printf '\033[1;31m[ip-tables]\033[0m %s\n' "$*" >&2; exit 1; }
+
+# -----------------------------------------------------------------------------
+#  1. Çalışma dizinleri
+# -----------------------------------------------------------------------------
+mkdir -p /run/php "${CONFD}"
+chown ipt:ipt /run/php
+
+# Çalışma yolları İngilizce adlara geçti: eski hacimdeki adlar açılışta taşınır
+# (dizinler OLUŞTURULMADAN önce; yeni ad varsa dokunulmaz, uyarı yazılır;
+# bkz. dc-paths).
+/usr/local/bin/dc-paths "${UYGULAMA}/storage/app" \
+    veritabani=database \
+    database/baglanti.json=database/connection.json \
+    database/durum.json=database/state.json \
+    guncelleme=update \
+    update/durum.json=update/state.json \
+    ilk-parola.txt=initial-password.txt
+
+mkdir -p "${UYGULAMA}"/storage/{app,logs} \
+         "${UYGULAMA}"/storage/framework/{cache/data,sessions,views} \
+         "${UYGULAMA}"/bootstrap/cache
+chown -R ipt:ipt "${UYGULAMA}"/storage "${UYGULAMA}"/bootstrap/cache
+
+
+# Sertifika sekmesinin istek dizini: panel istek.json bırakır, konteyner
+# dışındaki sertifika ajanı okur. Dizin root'a ait gelirse (yeni hacim,
+# chown'suz açılmış host dizini) panel yazamaz ve sekme istek bırakamaz. Bağlı
+# değilse dokunulmaz.
+if [ -d /etc/dc/sertifika-panel ]; then
+    chown ipt:ipt /etc/dc/sertifika-panel 2>/dev/null && chmod 0750 /etc/dc/sertifika-panel \
+        || uyari "/etc/dc/sertifika-panel yazılabilir değil (salt okunur bağlanmış olabilir); Sertifika sekmesi istek bırakamaz."
+fi
+
+# -----------------------------------------------------------------------------
+#  2. Varsayılanlar
+# -----------------------------------------------------------------------------
+#  İmajda .env DOSYASI YOKTUR; Laravel ayarları doğrudan ortamdan okur.
+#  Buradaki her değer ortamla (docker-compose.yml, .env ya da platformun
+#  değişken ekranı) ezilebilir.
+#
+#  DB_CONNECTION verilmezse Laravel SQLite'a düşer ve göçler "Database file at
+#  path [ip-tables] does not exist" ile patlar.
+: "${APP_NAME:=Erişim Yönetim Sistemi}"
+: "${APP_ENV:=production}"
+: "${APP_DEBUG:=false}"
+: "${APP_LOCALE:=tr}"
+: "${APP_TIMEZONE:=Europe/Istanbul}"
+: "${LOG_CHANNEL:=stderr}"
+
+: "${DB_CONNECTION:=mysql}"
+: "${DB_HOST:=db}"
+: "${DB_PORT:=3306}"
+: "${DB_DATABASE:=ip_tables}"
+: "${DB_USERNAME:=ip_tables}"
+
+# Veritabanı OTURUMUNUN saat dilimi: konteynerin saati (TZ). MariaDB TIMESTAMP
+# sütununu oturumun dilimine çevirerek okur ve yazar. İç veritabanı konteynerin
+# saatinde çalışır, uzak ya da yönetilen bir sunucu çoğu zaman UTC'de: dilim
+# eşitlenmezse taşınan her kayıt 3 saat kaymış okunur ve denetim zinciri kırık
+# görünür. Türkiye'de yaz saati yok; sabit fark yeter, sunucuda dilim tablosu
+# gerekmez.
+: "${DB_TIMEZONE:=$(date +%:z)}"
+
+# Önbellek, oturum ve kuyruk REDIS'te durur.
+#
+# Veritabanı sürücüsü her istekte SQL yazıyordu: oturum tablosu panelin en çok
+# yazılan tablosu hâline geliyor, yedeği de gereksiz yere şişiriyordu. Redis
+# compose'taki redis servisi; başka bir Redis REDIS_HOST ile gösterilir.
+: "${REDIS_CLIENT:=phpredis}"
+: "${REDIS_HOST:=redis}"
+: "${CACHE_STORE:=redis}"
+: "${SESSION_DRIVER:=redis}"
+: "${QUEUE_CONNECTION:=redis}"
+: "${FILESYSTEM_DISK:=local}"
+
+# ADMIN_EMAIL'in VARSAYILANI YOK: bir varsayılan adres, kurulumu yapan
+# kişinin sahip olmadığı bir hesabın açılması demek olurdu. Verilmezse
+# hesap hiç açılmaz (aşağıya bakın).
+# Konteyner kurulumunda ÖRNEK VERİ KAPALI: admin dışındaki yerleşik roller
+# yazılmaz. Kurulumu yapan kendi rollerini panelden açar.
+
+: "${ADMIN_NAME:=Sistem Yöneticisi}"
+
+# Oturum çerezi varsayılan olarak Secure'dur: panel TLS arkasında durur.
+# Düz HTTP ile denemek isteyen bunu bilerek kapatır.
+: "${SESSION_SECURE_COOKIE:=true}"
+
+export APP_NAME APP_ENV APP_DEBUG APP_LOCALE APP_TIMEZONE LOG_CHANNEL \
+       DB_CONNECTION DB_HOST DB_PORT DB_DATABASE DB_USERNAME DB_PASSWORD DB_TIMEZONE \
+       CACHE_STORE SESSION_DRIVER QUEUE_CONNECTION FILESYSTEM_DISK \
+       REDIS_CLIENT REDIS_HOST REDIS_PORT REDIS_PASSWORD \
+       SESSION_SECURE_COOKIE ADMIN_EMAIL ADMIN_NAME THEME_COOKIE_DOMAIN
+
+# -----------------------------------------------------------------------------
+#  3. APP_KEY
+# -----------------------------------------------------------------------------
+#  Şifreli sütunlar (merkez sırları, oturumlar) bu anahtarla şifrelenir.
+#
+#  Anahtar HACİMDE saklanır. Her açılışta yenisi üretilseydi her yeniden
+#  başlatma bütün oturumları düşürür, şifreli alanları okunamaz kılardı.
+ANAHTAR_DOSYASI="${UYGULAMA}/storage/app/app-key.txt"
+
+if [[ -z "${APP_KEY:-}" ]]; then
+    if [[ -s "${ANAHTAR_DOSYASI}" ]]; then
+        APP_KEY="$(cat "${ANAHTAR_DOSYASI}")"
+        export APP_KEY
+    else
+        APP_KEY="base64:$(head -c 32 /dev/urandom | base64)"
+        export APP_KEY
+
+        printf '%s' "${APP_KEY}" > "${ANAHTAR_DOSYASI}"
+        chmod 0600 "${ANAHTAR_DOSYASI}"
+        chown ipt:ipt "${ANAHTAR_DOSYASI}"
+
+        # Anahtarın KENDİSİ günlüğe yazılmaz: konteyner günlüğünü okuyabilen
+        # (docker logs, günlük toplayıcılar) kasanın bütün parolalarını açan
+        # anahtarı da okurdu. Anahtar zaten 0600 bir dosyada; burada yalnızca
+        # nerede olduğu söylenir.
+        uyari "════════════════════════════════════════════════════════════════"
+        uyari " APP_KEY verilmemişti, üretildi ve saklandı."
+        uyari ""
+        uyari " Dosya: storage/app/app-key.txt (hacimde durur, yalnızca ipt"
+        uyari " kullanıcısı okur; restart'ta yeniden üretilmez). Okumak için:"
+        uyari "   docker exec <kapsayıcı> cat /uygulama/storage/app/app-key.txt"
+        uyari ""
+        uyari " YEDEKLEYİN — kaybolursa kasadaki bütün parolalar okunamaz olur."
+        uyari "════════════════════════════════════════════════════════════════"
+    fi
+fi
+
+# -----------------------------------------------------------------------------
+#  4. Paneldeki veritabanı ayarı (Ayarlar → Veritabanı)
+# -----------------------------------------------------------------------------
+#  Panelde uzak bir veritabanı tanımlandıysa bağlantı storage/app/database'de
+#  şifreli durur ve yukarıdaki DB_* değerlerini EZER (bkz. ConnectionFile).
+#
+#  TAŞIMA BURADA YAPILIR, panel çalışmıyorken: kopya alınırken kimse yazmasın
+#  diye. Panel isteği bırakıp konteyneri yeniden başlatır (dc-restart);
+#  bu açılış ORTAMIN VERDİĞİ veritabanını (DB_*, çoğunlukla compose'taki db
+#  servisi) uzak hedefe kopyalar, tablo ve satır sayılarını iki tarafta
+#  karşılaştırır ve uzak veritabanıyla devam eder. Bir adım tutmazsa taşıma
+#  "basarisiz" yazılır ve panel ortamın veritabanıyla açılır. Kaynağa
+#  yazılmaz: taşıma anındaki hâliyle durur.
+VT_DIZIN="${UYGULAMA}/storage/app/database"
+VT_ASAMA=""
+VT_NEDEN=""
+VT_OZET=""
+declare -A VT_BAG=()
+
+vt() { gosu ipt env UYGULAMA="${UYGULAMA}" "${PHP}" /usr/local/bin/dc-database "$@"; }
+
+# Veritabanı bağlantıyı kabul edene kadar bekler (en çok ~3 dk). Seçenek
+# dosyası ilk argüman: parola komut satırına girmez.
+mariadb_bekle() {
+    for _ in $(seq 1 90); do
+        mariadb-admin "--defaults-extra-file=$1" --connect-timeout=2 ping --silent >/dev/null 2>&1 && return 0
+        sleep 2
+    done
+    return 1
+}
+
+vt_ilk_satir() { head -n 1 "$1" 2>/dev/null | cut -c 1-300; }
+
+# Bağlantıyı VT_BAG'e okur. Değerler base64 gelir: parolada tırnak, boşluk ya
+# da satır sonu olabilir ve eval'siz taşımanın güvenli yolu bu.
+vt_oku() {
+    local satirlar satir
+    satirlar="$(vt ortam)" || return 1
+    while IFS= read -r satir; do
+        [[ -n "${satir}" ]] && VT_BAG["${satir%%=*}"]="$(printf '%s' "${satir#*=}" | base64 -d)"
+    done <<< "${satirlar}"
+    [[ -n "${VT_BAG[DB_HOST]:-}" && -n "${VT_BAG[DB_DATABASE]:-}" ]]
+}
+
+vt_ortama_al() {
+    DB_CONNECTION=mysql
+    DB_HOST="${VT_BAG[DB_HOST]}"
+    DB_PORT="${VT_BAG[DB_PORT]}"
+    DB_DATABASE="${VT_BAG[DB_DATABASE]}"
+    DB_USERNAME="${VT_BAG[DB_USERNAME]}"
+    DB_PASSWORD="${VT_BAG[DB_PASSWORD]}"
+    DB_URL=""
+    export DB_CONNECTION DB_HOST DB_PORT DB_DATABASE DB_USERNAME DB_PASSWORD DB_URL
+}
+
+# Tablo başına kesin satır sayısı ("tablo sayı" satırları). Kopya sırasında
+# panel kapalı olduğu için iki tarafın çıktısı BİREBİR aynı olmalı.
+#
+# Sıralama KABUKTA yapılır: MariaDB ile MySQL'in information_schema
+# harmanlaması farklı ve ORDER BY "jobs" ile "job_batches"ı iki tarafta ters
+# diziyordu. Sayılar aynıyken kopya tutmadı sanılıyordu (MySQL 8.4, ölçüldü).
+vt_sayim() {
+    local tablolar t n
+    tablolar="$(mariadb "$@" -N -B -e "SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE() AND table_type = 'BASE TABLE'")" || return 1
+    for t in $(LC_ALL=C sort <<< "${tablolar}"); do
+        n="$(mariadb "$@" -N -B -e "SELECT COUNT(*) FROM \`${t}\`")" || return 1
+        printf '%s %s\n' "${t}" "${n}"
+    done
+}
+
+vt_kopyala() {
+    local kaynak_cnf=$1 cnf=$2 hata=$3 n kaynak hedef
+    # Seçenek dosyası İLK argüman olmak zorunda (mariadb istemcisinin kuralı).
+    local -a ic=("--defaults-extra-file=${kaynak_cnf}" --connect-timeout=10 "--database=${DB_DATABASE}")
+    local -a uzak=("--defaults-extra-file=${cnf}" --connect-timeout=10 "--database=${VT_BAG[DB_DATABASE]}")
+
+    # Kopya yalnızca tabloları taşır. Görünüm, yordam, tetikleyici ve olay
+    # tanımlayan kullanıcıya bağlıdır ve hedefte ayrı yetki ister; bu panelde
+    # yoklar, olursa eksik bir kopya yerine taşıma yapılmaz.
+    n="$(mariadb "${ic[@]}" -N -B -e "SELECT
+        (SELECT COUNT(*) FROM information_schema.views WHERE table_schema = DATABASE())
+      + (SELECT COUNT(*) FROM information_schema.routines WHERE routine_schema = DATABASE())
+      + (SELECT COUNT(*) FROM information_schema.triggers WHERE trigger_schema = DATABASE())
+      + (SELECT COUNT(*) FROM information_schema.events WHERE event_schema = DATABASE())" 2>"${hata}")" \
+        || { VT_NEDEN="Mevcut veritabanı okunamadı: $(vt_ilk_satir "${hata}")"; return 1; }
+    [[ "${n}" == "0" ]] \
+        || { VT_NEDEN="Mevcut veritabanında görünüm, yordam, tetikleyici ya da zamanlanmış olay var (${n}); bu taşıma onları kopyalamaz."; return 1; }
+
+    n="$(mariadb "${uzak[@]}" -N -B -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE()" 2>"${hata}")" \
+        || { VT_NEDEN="Uzak veritabanına bağlanılamadı: $(vt_ilk_satir "${hata}")"; return 1; }
+    [[ "${n}" == "0" ]] \
+        || { VT_NEDEN="Uzak veritabanı boş değil (${n} tablo); üzerine yazılmaz."; return 1; }
+
+    # --skip-add-locks: hedef kullanıcıdan LOCK TABLES yetkisi istenmesin.
+    # --no-tablespaces: kaynak kullanıcıdan PROCESS yetkisi istenmesin.
+    bilgi "Taşıma: kopyalanıyor..."
+    if ! mariadb-dump "--defaults-extra-file=${kaynak_cnf}" --single-transaction --skip-add-locks --skip-triggers \
+            --no-tablespaces --hex-blob --default-character-set=utf8mb4 "${DB_DATABASE}" 2>"${hata}" \
+        | mariadb "${uzak[@]}" --default-character-set=utf8mb4 2>>"${hata}"; then
+        VT_NEDEN="Kopya yarıda kaldı: $(vt_ilk_satir "${hata}") Uzak veritabanını boşaltıp yeniden deneyin."
+        return 1
+    fi
+
+    bilgi "Taşıma: iki tarafta tablo ve satırlar sayılıyor..."
+    kaynak="$(vt_sayim "${ic[@]}")" || { VT_NEDEN="Mevcut veritabanında sayım yapılamadı."; return 1; }
+    hedef="$(vt_sayim "${uzak[@]}" 2>"${hata}")" || { VT_NEDEN="Uzak veritabanında sayım yapılamadı: $(vt_ilk_satir "${hata}")"; return 1; }
+    [[ -n "${kaynak}" && "${kaynak}" == "${hedef}" ]] \
+        || { VT_NEDEN="Kopya tutmadı: iki taraftaki tablo ya da satır sayıları farklı. Uzak veritabanını boşaltıp yeniden deneyin."; return 1; }
+
+    VT_OZET="$(awk '{ n++; s += $2 } END { printf "%d tablo, %d satır kopyalandı; iki tarafta sayılar aynı.", n, s }' <<< "${kaynak}")"
+}
+
+vt_tasi() {
+    local kaynak_cnf=/run/dc-vt-kaynak.cnf cnf=/run/dc-vt-hedef.cnf hata=/run/dc-vt.hata sonuc=0
+
+    vt_oku || { VT_NEDEN="Bağlantı dosyası okunamadı."; return 1; }
+    if [[ "${VT_BAG[DB_HOST]}" == "${DB_HOST}" && "${VT_BAG[DB_PORT]}" == "${DB_PORT}" && "${VT_BAG[DB_DATABASE]}" == "${DB_DATABASE}" ]]; then
+        VT_NEDEN="Hedef, panelin şu anki veritabanının kendisi (${DB_HOST}:${DB_PORT}/${DB_DATABASE})."
+        return 1
+    fi
+    ( umask 077; vt ortam-istemci > "${kaynak_cnf}" && vt istemci > "${cnf}" ) \
+        || { rm -f "${kaynak_cnf}" "${cnf}"; VT_NEDEN="Bağlantı dosyası okunamadı."; return 1; }
+
+    bilgi "Taşıma: mevcut veritabanı bekleniyor (${DB_HOST}:${DB_PORT})..."
+    if mariadb_bekle "${kaynak_cnf}"; then
+        vt_kopyala "${kaynak_cnf}" "${cnf}" "${hata}" || sonuc=1
+    else
+        VT_NEDEN="Mevcut veritabanına (${DB_HOST}:${DB_PORT}) bağlanılamadı."
+        sonuc=1
+    fi
+    rm -f "${kaynak_cnf}" "${cnf}" "${hata}"
+    return "${sonuc}"
+}
+
+# BAĞLAN: yeni kurulum eski kurulumun DOLU veritabanına geçer; kopya yapılmaz.
+# Panel sınamıştı (bu panelin göçleri, sürüm, yetki); burada açılış anındaki
+# hâli bir kez daha bakılır: hedef boşalmış ya da göç kaydı kaybolmuşsa
+# geçilmez. Bekleyen göçler "deneniyor" adımında hedefte koşar; koşmazsa
+# ortamın veritabanına dönülür (ona yazılmamıştır).
+vt_baglan() {
+    local cnf=/run/dc-vt-hedef.cnf hatadosya=/run/dc-vt.hata sonuc=0 n m
+
+    vt_oku || { VT_NEDEN="Bağlantı dosyası okunamadı."; return 1; }
+    if [[ "${VT_BAG[DB_HOST]}" == "${DB_HOST}" && "${VT_BAG[DB_PORT]}" == "${DB_PORT}" && "${VT_BAG[DB_DATABASE]}" == "${DB_DATABASE}" ]]; then
+        VT_NEDEN="Hedef, panelin şu anki veritabanının kendisi (${DB_HOST}:${DB_PORT}/${DB_DATABASE})."
+        return 1
+    fi
+    ( umask 077; vt istemci > "${cnf}" ) || { rm -f "${cnf}"; VT_NEDEN="Bağlantı dosyası okunamadı."; return 1; }
+
+    local -a uzak=("--defaults-extra-file=${cnf}" --connect-timeout=10 "--database=${VT_BAG[DB_DATABASE]}")
+    bilgi "Bağlanma: hedef bekleniyor (${VT_BAG[DB_HOST]}:${VT_BAG[DB_PORT]})..."
+    if ! mariadb_bekle "${cnf}"; then
+        VT_NEDEN="Hedef veritabanına (${VT_BAG[DB_HOST]}:${VT_BAG[DB_PORT]}) bağlanılamadı."
+        sonuc=1
+    elif ! n="$(mariadb "${uzak[@]}" -N -B -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE()" 2>"${hatadosya}")"; then
+        VT_NEDEN="Hedef okunamadı: $(vt_ilk_satir "${hatadosya}")"
+        sonuc=1
+    elif [[ "${n}" == "0" ]]; then
+        VT_NEDEN="Hedef veritabanı boş; bağlanacak veri yok. Boş hedefe Taşı ile kopyalayın."
+        sonuc=1
+    elif ! m="$(mariadb "${uzak[@]}" -N -B -e "SELECT COUNT(*) FROM migrations" 2>"${hatadosya}")"; then
+        VT_NEDEN="Hedefte göç kaydı (migrations) okunamadı; bu panelin veritabanı değil: $(vt_ilk_satir "${hatadosya}")"
+        sonuc=1
+    else
+        VT_OZET="Mevcut veritabanına bağlanıldı (${n} tablo, ${m} göç kaydı); kopya yapılmadı."
+    fi
+    rm -f "${cnf}" "${hatadosya}"
+    return "${sonuc}"
+}
+
+# Bu açılış zaten istenen yeniden başlatmadır; kalmış bir istek (konteyner
+# döngü görmeden durdurulduysa) bir kez daha boşuna başlatırdı.
+rm -f "${VT_DIZIN}/restart"
+
+if [[ -f "${VT_DIZIN}/state.json" ]]; then
+    VT_ASAMA="$(vt asama)" || hata "Veritabanı ayarı okunamadı (${VT_DIZIN}/state.json)."
+fi
+
+case "${VT_ASAMA}" in
+    tasiniyor|deneniyor)
+        # Bir önceki açılış taşımanın ortasında kapandı (elle durdurma, elektrik).
+        # Panel uzak veritabanına henüz yazmadı; ortamın veritabanıyla devam
+        # etmek veri kaybettirmez.
+        uyari "Önceki açılış veritabanı taşımasının ortasında kapanmış; ortamın veritabanıyla devam ediliyor."
+        vt yaz basarisiz "Önceki açılış taşımanın ortasında kapandı; panel ortamın veritabanıyla açıldı. Taşımada uzak veritabanını boşaltıp yeniden deneyin; bağlanmada hedefteki veriye dokunmadan yeniden deneyin."
+        VT_ASAMA=basarisiz
+        ;;
+    tasinacak)
+        bilgi "Veritabanı uzak sunucuya taşınıyor..."
+        vt yaz tasiniyor
+        if vt_tasi; then
+            vt yaz deneniyor "${VT_OZET}"
+            VT_ASAMA=deneniyor
+            bilgi "Taşıma: ${VT_OZET}"
+        else
+            uyari "Taşıma yapılmadı: ${VT_NEDEN:-bilinmeyen sebep}"
+            vt yaz basarisiz "${VT_NEDEN:-Bilinmeyen sebep.}"
+            VT_ASAMA=basarisiz
+        fi
+        ;;
+    baglanacak)
+        bilgi "Mevcut veritabanına bağlanılıyor..."
+        if vt_baglan; then
+            vt yaz deneniyor "${VT_OZET}"
+            VT_ASAMA=deneniyor
+            bilgi "Bağlanma: ${VT_OZET}"
+        else
+            uyari "Bağlanılmadı: ${VT_NEDEN:-bilinmeyen sebep}"
+            vt yaz basarisiz "${VT_NEDEN:-Bilinmeyen sebep.}"
+            VT_ASAMA=basarisiz
+        fi
+        ;;
+esac
+
+if [[ "${VT_ASAMA}" == "deneniyor" || "${VT_ASAMA}" == "etkin" ]]; then
+    if [[ -z "${VT_BAG[DB_HOST]:-}" ]] && ! vt_oku; then
+        # "etkin"de ortamın veritabanına DÖNÜLMEZ: taşıma anında donmuştu.
+        [[ "${VT_ASAMA}" == "etkin" ]] \
+            && hata "Panel uzak veritabanında ama bağlantı dosyası okunamıyor (APP_KEY değişmiş ya da dosya silinmiş olabilir). Ortamın veritabanı taşıma anındaki hâliyle duruyor; kendiliğinden ona dönülmez."
+        vt yaz basarisiz "Bağlantı dosyası okunamadı."
+        VT_ASAMA=basarisiz
+    else
+        vt_ortama_al
+        bilgi "Veritabanı: paneldeki ayar (${DB_HOST}:${DB_PORT}/${DB_DATABASE})."
+    fi
+fi
+
+# Koşullu servislerin conf.d parçaları her açılışta baştan yazılır.
+rm -f "${CONFD}"/*.conf
+
+# -----------------------------------------------------------------------------
+#  5. Veritabanını bekle
+# -----------------------------------------------------------------------------
+#  compose'taki db servisi ilk açılışta veri dizinini kurarken birkaç saniye
+#  bağlantı kabul etmez; uzak sunucu ağ ya da bakım yüzünden geç gelebilir.
+#  Gelmezse panel açılmaz (çıkış kodu yeniden başlatır): boş bir SQLite'a ya
+#  da yanlış yere düşmekten iyidir.
+if [[ -z "${DB_PASSWORD:-}" ]]; then
+    hata "DB_PASSWORD verilmedi. Veritabanının parolası ortamdan gelir (bkz. .env.example)."
+fi
+VT_BEKLE_CNF=/run/dc-vt-bekle.cnf
+( umask 077; vt ortam-istemci > "${VT_BEKLE_CNF}" ) || hata "Veritabanı bağlantısı hazırlanamadı."
+bilgi "Veritabanı bekleniyor (${DB_HOST}:${DB_PORT})..."
+mariadb_bekle "${VT_BEKLE_CNF}" || { rm -f "${VT_BEKLE_CNF}"; hata "Veritabanına (${DB_HOST}:${DB_PORT}) bağlanılamadı."; }
+rm -f "${VT_BEKLE_CNF}"
+
+# -----------------------------------------------------------------------------
+#  6. Göçler ve önbellek
+# -----------------------------------------------------------------------------
+#  --isolated: birden fazla örnek aynı anda kalksa bile göç BİR kez koşar.
+#  --isolated kilidi ÖNBELLEĞE yazılır ve önbellek veritabanındadır: göçler
+#  koşmadan `cache_locks` tablosu HENÜZ YOK. İlk açılışta bu, göçün kendisini
+#  "Table 'cache_locks' doesn't exist" ile düşürüyordu — tavuk-yumurta.
+#
+#  Kilit bu tek komut için DOSYA önbelleğine alınır: hem tabloya ihtiyaç
+#  kalmaz hem koruma durur (aynı hacmi paylaşan ikinci bir örnek göçü ikinci
+#  kez koşturamaz).
+#
+#  Önceki açılışın yapılandırma önbelleği SİLİNİR: konteyner yeniden
+#  başladığında bootstrap/cache yerinde kalıyor ve Laravel ortamı değil onu
+#  okuyor. Veritabanı taşımasından sonra göçler eski bağlantıya koşardı.
+rm -f "${UYGULAMA}/bootstrap/cache/config.php"
+
+bilgi "Göçler çalıştırılıyor..."
+if [[ "${VT_ASAMA}" == "deneniyor" ]]; then
+    # Uzak veritabanıyla ilk açılış: göçler koşmazsa taşıma geri alınır.
+    # Panel bu veritabanına henüz hiç yazmadı; ortamın veritabanına dönmek
+    # veri kaybettirmez. Çıkış kodu yeniden başlatmayı tetikler, bir sonraki
+    # açılış "basarisiz"ı görüp ortamın veritabanıyla açılır.
+    if ! gosu ipt env CACHE_STORE=file "${PHP}" artisan migrate --force --isolated; then
+        vt yaz basarisiz "Uzak veritabanıyla ilk açılışta göçler koşmadı; panel ortamın veritabanıyla açıldı. Taşımada uzak veritabanını boşaltıp yeniden deneyin; bağlanmada hedefteki veriye dokunmayın, konteyner günlüğündeki göç hatasına bakın." || true
+        hata "Uzak veritabanında göçler koşmadı; taşıma geri alındı, panel ortamın veritabanıyla yeniden açılacak."
+    fi
+    vt yaz etkin
+    bilgi "Veritabanı geçişi tamamlandı: panel artık uzak veritabanında."
+else
+    gosu ipt env CACHE_STORE=file "${PHP}" artisan migrate --force --isolated
+fi
+
+# İlk yönetici YALNIZCA veritabanı boşken oluşturulur; var olan kuruluma
+# dokunulmaz. Dört liste grubu (IPv4, IPv6, yerel IPv4, yerel IPv6) göçlerle
+# gelir; adres verisi hiçbir zaman tohumdan gelmez.
+if [[ "$(gosu ipt "${PHP}" artisan tinker --execute='echo App\Models\User::query()->count();' 2>/dev/null | tail -1)" == "0" ]]; then
+    # Hesap HER ZAMAN açılır — kimsenin giremediği bir panel işe yaramaz.
+    # Ad, adres ve parola ortamdan gelir; verilmeyenler için:
+    #   * adres verilmediyse .local bir adres kullanılır (hiçbir yere yönlenmez),
+    #   * parola verilmediyse RASTGELE üretilir ve bir kez gösterilir.
+    # Sabit bir parola konulsaydı imajı indiren herkeste aynı giriş olurdu;
+    # asıl tehlike adresin değil, parolanın paylaşılmasıdır.
+    if [[ -z "${ADMIN_EMAIL:-}" ]]; then
+        ADMIN_EMAIL="admin@ip-tables.local"
+        export ADMIN_EMAIL
+        uyari "ADMIN_EMAIL verilmedi; admin@ip-tables.local kullanılıyor."
+        uyari "Değiştirmek: panelde Hesap → Profil, ya da admin:add"
+    fi
+
+    URETILDI=0
+
+    if [[ -z "${ADMIN_PASSWORD:-}" ]]; then
+        # Sabit bir varsayılan parola KONULMAZ: imaj herkese aynı, parola
+        # herkese aynı olurdu.
+        ADMIN_PASSWORD="$(head -c 18 /dev/urandom | base64 | tr -d '/+=' | head -c 20)"
+        export ADMIN_PASSWORD
+        URETILDI=1
+    fi
+
+    bilgi "İlk yönetici oluşturuluyor: ${ADMIN_EMAIL}"
+    gosu ipt "${PHP}" artisan db:seed --force --class=Database\\Seeders\\AdminUserSeeder
+
+    if [[ "${URETILDI}" == "1" ]]; then
+        ILK_PAROLA="${UYGULAMA}/storage/app/initial-password.txt"
+        printf '%s\n%s\n' "${ADMIN_EMAIL}" "${ADMIN_PASSWORD}" > "${ILK_PAROLA}"
+        chmod 0600 "${ILK_PAROLA}"
+        chown ipt:ipt "${ILK_PAROLA}"
+
+        # Parolanın kendisi günlüğe yazılmaz (bkz. APP_KEY notu yukarıda);
+        # dosya 0600 ve hacimde durur.
+        uyari "════════════════════════════════════════════════════════════════"
+        uyari " İlk yönetici parolası ÜRETİLDİ:"
+        uyari ""
+        uyari "   e-posta: ${ADMIN_EMAIL}"
+        uyari "   parola : storage/app/initial-password.txt dosyasında (2. satır). Okumak için:"
+        uyari "     docker exec <kapsayıcı> cat /uygulama/storage/app/initial-password.txt"
+        uyari ""
+        uyari " Giriş yapıp parolayı değiştirdikten sonra o dosyayı SİLİN."
+        uyari "════════════════════════════════════════════════════════════════"
+    fi
+fi
+
+bilgi "Önbellekler üretiliyor..."
+gosu ipt "${PHP}" artisan optimize
+
+bilgi "Panel hazır."
+exec "$@"

@@ -1,0 +1,16 @@
+# IP Adres Tabloları — kendi Caddy'niz için örnek kural
+#
+# Platformun vekili (NineDeploy/Traefik, Coolify...) kullanılıyorsa GEREKMEZ.
+# Caddy panelle aynı Docker ağında durur ve panele konteyner adıyla ulaşır
+# (varsayılan ip-tables; STACK_PREFIX değiştiyse o). Alan adını değiştirip
+# Caddyfile'a ekleyin ya da import edin.
+
+ip.ornek.test {
+	reverse_proxy ip-tables:80 {
+		# Panel bu başlıklara bakarak isteğin HTTPS olduğunu anlar. Caddy
+		# X-Forwarded-Proto'yu kendiliğinden ekler; Host'u da geçirmek
+		# gerekiyor, çünkü panel mutlak adresleri ondan üretiyor.
+		header_up Host {host}
+		header_up X-Real-IP {remote_host}
+	}
+}
