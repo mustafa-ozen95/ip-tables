@@ -332,10 +332,13 @@ class IpAddressScreenTest extends TestCase
 
     /* ── IPv4 blok kuralı (Ipv4BlockRules) ── */
 
-    private function bol(AddressGroup $grup, IpAddress $blok, string $duzen): void
+    /** Bloğun tamamını tek subnete böler. */
+    private function bol(AddressGroup $grup, IpAddress $blok, int $subnet): void
     {
         $this->actingAs($this->kullanici($grup, ['view', 'update', 'create']))
-            ->post(route('ip-addresses.split', $blok), ['layout' => $duzen])
+            ->post(route('ip-addresses.split', $blok), ['ranges' => [[
+                'prefix' => $subnet, 'slot' => '0-255', 'count' => $subnet.':'.(2 ** ($subnet - 24)),
+            ]]])
             ->assertSessionHasNoErrors();
     }
 
@@ -359,7 +362,7 @@ class IpAddressScreenTest extends TestCase
     public function bolunmus_bloga_elle_parca_eklenemez(): void
     {
         $grup = $this->grup('Grup A');
-        $this->bol($grup, $this->adres($grup, '192.0.2.0/24'), '25x2');
+        $this->bol($grup, $this->adres($grup, '192.0.2.0/24'), 25);
 
         $this->actingAs($this->kullanici($grup, ['view', 'create']))
             ->post(route('ip-addresses.store'), $this->form($grup, '192.0.2.10'))
@@ -402,7 +405,7 @@ class IpAddressScreenTest extends TestCase
     {
         $grup = $this->grup('Grup A');
         $blok = $this->adres($grup, '192.0.2.0/24');
-        $this->bol($grup, $blok, '25x2');
+        $this->bol($grup, $blok, 25);
 
         $this->actingAs($this->kullanici($grup, ['view', 'delete']))
             ->delete(route('ip-addresses.destroy', $blok), ['reason' => 'deneme'])
@@ -415,7 +418,7 @@ class IpAddressScreenTest extends TestCase
     public function parca_tek_basina_silinemez(): void
     {
         $grup = $this->grup('Grup A');
-        $this->bol($grup, $this->adres($grup, '192.0.2.0/24'), '25x2');
+        $this->bol($grup, $this->adres($grup, '192.0.2.0/24'), 25);
         $parca = $grup->ipAddresses()->where('prefix', 25)->firstOrFail();
 
         $this->actingAs($this->kullanici($grup, ['view', 'delete']))
@@ -430,7 +433,7 @@ class IpAddressScreenTest extends TestCase
     public function parcanin_adi_degisir_adresi_degismez(): void
     {
         $grup = $this->grup('Grup A');
-        $this->bol($grup, $this->adres($grup, '192.0.2.0/24'), '25x2');
+        $this->bol($grup, $this->adres($grup, '192.0.2.0/24'), 25);
         $parca = $grup->ipAddresses()->where('prefix', 25)->firstOrFail();
         $kullanici = $this->kullanici($grup, ['view', 'update']);
 
@@ -450,7 +453,7 @@ class IpAddressScreenTest extends TestCase
     {
         $grup = $this->grup('Grup A');
         $blok = $this->adres($grup, '192.0.2.0/24');
-        $this->bol($grup, $blok, '25x2');
+        $this->bol($grup, $blok, 25);
         $kullanici = $this->kullanici($grup, ['view', 'update']);
 
         $this->actingAs($kullanici)

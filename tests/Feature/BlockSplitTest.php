@@ -11,20 +11,19 @@ use App\Models\User;
 use App\Models\UserPermission;
 use App\Policies\IpAddressPolicy;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
 
 /**
- * /24 bloğu bölme ve bölmeyi kaldırma (bkz. Ipv4BlockRules, Ipv4SplitLayout).
+ * /24 bloğu aralık aralık bölme, bölmeyi kaldırma, parçayı birleştirme ve
+ * ikiye ayırma (bkz. Ipv4BlockRules, Ipv4SplitLayout).
  *
  * Adresler belgeleme aralıklarındandır (RFC 5737).
  */
 class BlockSplitTest extends TestCase
 {
     use RefreshDatabase;
-
-    /** Kullanıcının verdiği örnek düzen: /29'lar arasında /28 ve /27, sırası korunur. */
-    private const KARISIK = '29x10 28x2 29x6 27 28x2 29x2 28';
 
     private AddressGroup $grup;
 
@@ -61,6 +60,23 @@ class BlockSplitTest extends TestCase
         return $this->kullanici(['view', 'update', 'create']);
     }
 
+    /**
+     * Satırlar: [subnet, aralık ("64-79"), adet]; adet pencerede subneti de
+     * taşır ("28:1"), boş subnette boştur.
+     *
+     * @param  list<array{0: int|string, 1: string, 2: int|string}>  $satirlar
+     * @param  array<string, mixed>  $ek
+     */
+    private function bol(array $satirlar, ?User $kullanici = null, array $ek = []): TestResponse
+    {
+        return $this->actingAs($kullanici ?? $this->bolen())->post(route('ip-addresses.split', $this->blok), [
+            'ranges' => array_map(fn (array $s): array => [
+                'prefix' => $s[0], 'slot' => $s[1], 'count' => $s[0] === '' ? '' : "{$s[0]}:{$s[2]}",
+            ], $satirlar),
+            ...$ek,
+        ]);
+    }
+
     /** @return list<string> */
     private function parcalar(): array
     {
@@ -68,112 +84,95 @@ class BlockSplitTest extends TestCase
             ->map(fn (IpAddress $a): string => $a->notation)->all();
     }
 
-    #[Test]
-    public function karisik_duzen_yazildigi_sirayla_bolunur(): void
+    private function parca(string $notasyon): IpAddress
     {
-        $this->actingAs($this->bolen())
-            ->post(route('ip-addresses.split', $this->blok), ['layout' => self::KARISIK])
+        [$adres, $onek] = explode('/', $notasyon);
+
+        return $this->grup->ipAddresses()->where('address', $adres)->where('prefix', (int) $onek)->firstOrFail();
+    }
+
+    /** Her aralık kendi subnetine, tek seferde: .0–.63 /29, .64–.127 /28, .128–.191 /27. */
+    #[Test]
+    public function araliklar_kendi_subnetine_bolunur_kalani_bos_kalir(): void
+    {
+        $this->bol([[29, '0-63', 8], [28, '64-127', 4], [27, '128-191', 2], ['', '', '1']])
             ->assertRedirect(route('ip-addresses.index', ['grup' => $this->grup->uuid, 'kayit' => $this->blok->uuid, 'blok' => $this->blok->uuid]))
             ->assertSessionHasNoErrors();
 
         $parcalar = $this->parcalar();
-        $this->assertCount(24, $parcalar);
-        $this->assertSame(['198.51.100.0/29', '198.51.100.72/29', '198.51.100.80/28', '198.51.100.96/28', '198.51.100.112/29'],
-            [$parcalar[0], $parcalar[9], $parcalar[10], $parcalar[11], $parcalar[12]]);
-        $this->assertSame(['198.51.100.160/27', '198.51.100.192/28', '198.51.100.240/28'],
-            [$parcalar[18], $parcalar[19], $parcalar[23]]);
+        $this->assertCount(8 + 4 + 2, $parcalar);
+        $this->assertSame(['198.51.100.0/29', '198.51.100.56/29', '198.51.100.64/28', '198.51.100.112/28', '198.51.100.128/27', '198.51.100.160/27'],
+            [$parcalar[0], $parcalar[7], $parcalar[8], $parcalar[11], $parcalar[12], $parcalar[13]]);
 
         $this->assertDatabaseHas('activity_logs', [
             'action' => 'updated',
-            'summary' => 'Blok bölündü: Grup A · 198.51.100.0/24 (musteri-blok) → 24 parça (/29×10 /28×2 /29×6 /27 /28×2 /29×2 /28)',
+            'summary' => 'Blok bölündü: Grup A · 198.51.100.0/24 (musteri-blok) → 14 parça (.0–.63 /29×8 · .64–.127 /28×4 · .128–.191 /27×2)',
         ]);
     }
 
+    /** Boş alan sonra bölünür; bölünmüş yerle çakışan aralık reddedilir (tek kat). */
     #[Test]
-    public function hizasiz_parca_reddedilir(): void
+    public function bos_alan_sonra_bolunur_dolu_yer_bolunmez(): void
     {
-        $this->actingAs($this->bolen())
-            ->post(route('ip-addresses.split', $this->blok), ['layout' => '29 28 25'])
-            ->assertSessionHasErrors(['layout' => '/28 parçası 16 adreslik sınırda başlamalı; 198.51.100.8 uygun değil. Parçaların sırasını değiştirin.']);
+        $this->bol([[26, '0-127', 2]])->assertSessionHasNoErrors();
 
-        $this->assertSame([], $this->parcalar());
-    }
+        $this->bol([[27, '64-191', 4]])
+            ->assertSessionHasErrors(['ranges' => '198.51.100.64 – .191 aralığı bölünmüş bir yerle çakışıyor; yalnız boş alan bölünür.']);
 
-    /** Son boy bloğun sonuna kadar tekrarlanır: yalnız "29" 32 tane /29 demektir. */
-    #[Test]
-    public function son_boy_blogun_sonuna_kadar_tekrarlanir(): void
-    {
-        $this->actingAs($this->bolen())
-            ->post(route('ip-addresses.split', $this->blok), ['layout' => '29'])
-            ->assertSessionHasNoErrors();
+        $this->bol([[25, '128-255', 1]])->assertSessionHasNoErrors();
 
-        $parcalar = $this->parcalar();
-        $this->assertCount(32, $parcalar);
-        $this->assertSame(['198.51.100.0/29', '198.51.100.248/29'], [$parcalar[0], $parcalar[31]]);
+        $this->assertSame(['198.51.100.0/26', '198.51.100.64/26', '198.51.100.128/25'], $this->parcalar());
     }
 
     #[Test]
-    public function karisik_duzenin_kalani_son_boyla_dolar(): void
+    public function hatali_aralik_reddedilir(): void
     {
+        $durumlar = [
+            '1. satırda subnet ve müsait aralık birlikte seçilir.' => [[29, '', 1]],
+            '1. satırdaki aralık 1 tane /28 boyunda değil; listeden yeniden seçin.' => [[28, '0-7', 1]],
+            '1. satır bloğun sonunu aşıyor: .240’ten sonra en çok 2 tane /29 sığar.' => [[29, '240-263', 3]],
+            '/28 16 adreslik sınırda başlar; 198.51.100.8 uygun değil (ör. .0 ya da .16).' => [[28, '8-23', 1]],
+            '198.51.100.0 – .63 ile 198.51.100.32 – .95 aralıkları çakışıyor.' => [[27, '0-63', 2], [27, '32-95', 2]],
+            'En az bir satırda subnet ve müsait aralık seçin.' => [['', '', '1']],
+        ];
+
+        foreach ($durumlar as $mesaj => $satirlar) {
+            $this->bol($satirlar)->assertSessionHasErrors(['ranges' => $mesaj]);
+        }
+
+        /* Adet başka subnetin listesinden gelirse aralık boyu ona göre okunmaz. */
         $this->actingAs($this->bolen())
-            ->post(route('ip-addresses.split', $this->blok), ['layout' => '26 28x2 29'])
-            ->assertSessionHasNoErrors();
-
-        $parcalar = $this->parcalar();
-        $this->assertCount(3 + 20, $parcalar);
-        $this->assertSame(['198.51.100.0/26', '198.51.100.64/28', '198.51.100.80/28', '198.51.100.96/29'], array_slice($parcalar, 0, 4));
-    }
-
-    #[Test]
-    public function blogu_asan_duzen_reddedilir(): void
-    {
+            ->post(route('ip-addresses.split', $this->blok), ['ranges' => [['prefix' => 29, 'slot' => '0-15', 'count' => '28:1']]])
+            ->assertSessionHasErrors(['ranges' => '1. satırdaki adet /29 için değil; listeden yeniden seçin.']);
         $this->actingAs($this->bolen())
-            ->post(route('ip-addresses.split', $this->blok), ['layout' => '25x3'])
-            ->assertSessionHasErrors(['layout' => 'Parçalar /24’ü aşıyor: toplam 384 adres, blok 256 adres.']);
+            ->post(route('ip-addresses.split', $this->blok), ['ranges' => [['prefix' => 29, 'slot' => '0-7', 'count' => '2']]])
+            ->assertSessionHasErrors('ranges.0.count');
 
-        $this->assertSame([], $this->parcalar());
-    }
-
-    #[Test]
-    public function bozuk_yazim_ve_aralik_disi_boy_reddedilir(): void
-    {
-        $kullanici = $this->bolen();
-
-        foreach (['yarim', '29x0', '29x99999', '24x1', '33'] as $duzen) {
-            $this->actingAs($kullanici)
-                ->post(route('ip-addresses.split', $this->blok), ['layout' => $duzen])
-                ->assertSessionHasErrors('layout');
+        /* /31 ve /32 pencereden açılmaz (ikiye ayırmayla açılır); /24 parça olmaz. */
+        foreach ([31, 24] as $subnet) {
+            $this->bol([[$subnet, '0-1', 1]])->assertSessionHasErrors('ranges.0.prefix');
         }
 
         $this->assertSame([], $this->parcalar());
     }
 
-    /** Bölme tek kattır: bölünmüş blok yeniden, parça da hiç bölünmez. */
+    /** Önizleme kayıt açmaz; pencere aynı satırlarla, sonuç özetiyle döner. */
     #[Test]
-    public function ic_ice_bolme_yok(): void
+    public function onizleme_kayit_acmaz(): void
     {
-        $kullanici = $this->bolen();
-        $this->actingAs($kullanici)->post(route('ip-addresses.split', $this->blok), ['layout' => '25x2']);
-        $parca = $this->grup->ipAddresses()->where('prefix', 25)->firstOrFail();
+        $this->bol([[29, '0-63', 8]], ek: ['onizle' => '1'])
+            ->assertRedirect(route('ip-addresses.index', ['grup' => $this->grup->uuid, 'kayit' => $this->blok->uuid, 'pencere' => 'bol']))
+            ->assertSessionHas('splitPreview', '8 parça: .0–.63 /29×8')
+            ->assertSessionHasInput('ranges.0.slot', '0-63');
 
-        $this->actingAs($kullanici)
-            ->post(route('ip-addresses.split', $this->blok), ['layout' => '26x4'])
-            ->assertSessionHasErrors(['layout' => 'Bu blok zaten bölünmüş; yeniden bölmek için önce bölmesini kaldırın.']);
-
-        $this->actingAs($kullanici)
-            ->post(route('ip-addresses.split', $parca), ['layout' => '26x2'])
-            ->assertSessionHasErrors(['layout' => 'Yalnız IPv4 /24 blok bölünür.']);
-
-        $this->assertCount(2, $this->parcalar());
+        $this->assertSame([], $this->parcalar());
     }
 
     /** Bölme kayıt açar: "düzenle" tek başına yetmez, grupta "ekle" de gerekir. */
     #[Test]
     public function ekleme_yetkisi_olmadan_bolunemez(): void
     {
-        $this->actingAs($this->kullanici(['view', 'update']))
-            ->post(route('ip-addresses.split', $this->blok), ['layout' => '25x2'])
-            ->assertForbidden();
+        $this->bol([[25, '0-255', 2]], $this->kullanici(['view', 'update']))->assertForbidden();
 
         $this->assertSame([], $this->parcalar());
     }
@@ -181,19 +180,134 @@ class BlockSplitTest extends TestCase
     #[Test]
     public function baska_grubun_blogu_bolunemez(): void
     {
-        $diger = AddressGroup::factory()->create();
-
-        $this->actingAs($this->kullanici(['view', 'update', 'create'], $diger))
-            ->post(route('ip-addresses.split', $this->blok), ['layout' => '25x2'])
+        $this->bol([[25, '0-255', 2]], $this->kullanici(['view', 'update', 'create'], AddressGroup::factory()->create()))
             ->assertForbidden();
 
         $this->assertSame([], $this->parcalar());
     }
 
     #[Test]
+    public function parca_bolme_penceresiyle_bolunmez(): void
+    {
+        $this->bol([[25, '0-255', 2]])->assertSessionHasNoErrors();
+        $parca = $this->parca('198.51.100.0/25');
+
+        $this->actingAs($this->bolen())
+            ->post(route('ip-addresses.split', $parca), ['ranges' => [['prefix' => 26, 'slot' => '0-63', 'count' => '26:1']]])
+            ->assertSessionHasErrors(['ranges' => 'Yalnız IPv4 /24 blok bölünür.']);
+
+        $this->assertCount(2, $this->parcalar());
+    }
+
+    /** Sıralı iki /29 bir /28 olur; adı olan parça kalır. */
+    #[Test]
+    public function sirali_iki_esi_birlesir(): void
+    {
+        $this->bol([[29, '0-255', 32]])->assertSessionHasNoErrors();
+        $this->parca('198.51.100.8/29')->update(['name' => 'musteri-x', 'description' => 'hat 1']);
+        $kalan = $this->parca('198.51.100.8/29');
+
+        $this->actingAs($this->kullanici(['view', 'update', 'delete']))
+            ->post(route('ip-addresses.merge', $this->parca('198.51.100.0/29')))
+            ->assertRedirect(route('ip-addresses.index', ['grup' => $this->grup->uuid, 'kayit' => $kalan->uuid, 'blok' => $this->blok->uuid]))
+            ->assertSessionHas('status');
+
+        $this->assertSame(['198.51.100.0/28', '198.51.100.16/29'], array_slice($this->parcalar(), 0, 2));
+        $this->assertCount(31, $this->parcalar());
+        $this->assertSame(['198.51.100.0', 28, 'musteri-x', 'hat 1'], [$kalan->fresh()->address, $kalan->fresh()->prefix, $kalan->fresh()->name, $kalan->fresh()->description]);
+        $this->assertDatabaseHas('activity_logs', ['action' => 'updated', 'summary' => 'Parçalar birleştirildi: Grup A · 198.51.100.0/29 + 198.51.100.8/29 → 198.51.100.0/28']);
+    }
+
+    #[Test]
+    public function birlesme_kurali(): void
+    {
+        $this->bol([[29, '0-7', 1], [29, '16-31', 2], [28, '32-47', 1], [25, '128-255', 1]])->assertSessionHasNoErrors();
+        $this->parca('198.51.100.16/29')->update(['name' => 'a']);
+        $this->parca('198.51.100.24/29')->update(['name' => 'b']);
+        $kullanici = $this->kullanici(['view', 'update', 'delete']);
+
+        $durumlar = [
+            '198.51.100.0/29' => 'Birleşecek eş parça yok: 198.51.100.8/29 bölünmüş ve aynı boyda olmalı.',
+            '198.51.100.32/28' => 'Birleşecek eş parça yok: 198.51.100.48/28 bölünmüş ve aynı boyda olmalı.',
+            '198.51.100.16/29' => 'İki parçanın da adı var; birleştirmek için birini boşaltın.',
+            '198.51.100.128/25' => '/25 parçalar birleşmez; bloğun tamamı için bölmeyi kaldırın.',
+        ];
+
+        foreach ($durumlar as $parca => $mesaj) {
+            $this->actingAs($kullanici)
+                ->from(route('ip-addresses.index'))
+                ->post(route('ip-addresses.merge', $this->parca($parca)))
+                ->assertSessionHas('error', $mesaj);
+        }
+
+        $this->actingAs($kullanici)
+            ->post(route('ip-addresses.merge', $this->blok))
+            ->assertSessionHas('error', 'Yalnız bir bloğun parçası birleştirilir.');
+
+        $this->assertCount(5, $this->parcalar());
+    }
+
+    /** Birleştirme eşi siler: silme yetkisi de aranır. */
+    #[Test]
+    public function silme_yetkisi_olmadan_birlesmez(): void
+    {
+        $this->bol([[25, '0-255', 2]])->assertSessionHasNoErrors();
+
+        $this->actingAs($this->kullanici(['view', 'update']))
+            ->post(route('ip-addresses.merge', $this->parca('198.51.100.0/25')))
+            ->assertForbidden();
+
+        $this->assertCount(2, $this->parcalar());
+    }
+
+    /** /28 iki sıralı /29 olur: kayıt öndeki yarıdır, adını korur. */
+    #[Test]
+    public function parca_ikiye_ayrilir(): void
+    {
+        $this->bol([[28, '0-255', 16]])->assertSessionHasNoErrors();
+        $parca = $this->parca('198.51.100.16/28');
+        $parca->update(['name' => 'musteri-y']);
+
+        $this->actingAs($this->bolen())
+            ->post(route('ip-addresses.halve', $parca))
+            ->assertRedirect(route('ip-addresses.index', ['grup' => $this->grup->uuid, 'kayit' => $parca->uuid, 'blok' => $this->blok->uuid]));
+
+        $this->assertSame(['198.51.100.0/28', '198.51.100.16/29', '198.51.100.24/29', '198.51.100.32/28'], array_slice($this->parcalar(), 0, 4));
+        $this->assertSame(['198.51.100.16', 29, 'musteri-y'], [$parca->fresh()->address, $parca->fresh()->prefix, $parca->fresh()->name]);
+        $this->assertNull($this->parca('198.51.100.24/29')->name);
+        $this->assertDatabaseHas('activity_logs', ['summary' => 'Parça ikiye ayrıldı: Grup A · 198.51.100.16/28 (musteri-y) → 198.51.100.16/29 + 198.51.100.24/29']);
+    }
+
+    #[Test]
+    public function ikiye_ayirma_kurali_ve_yetkisi(): void
+    {
+        $this->bol([[30, '0-255', 64]])->assertSessionHasNoErrors();
+
+        /* /30 → /31 → /32: ikiye ayırma pencerenin açmadığı boyları açar. */
+        $this->actingAs($this->bolen())->post(route('ip-addresses.halve', $this->parca('198.51.100.0/30')));
+        $this->actingAs($this->bolen())->post(route('ip-addresses.halve', $this->parca('198.51.100.0/31')));
+        $this->assertSame(['198.51.100.0', '198.51.100.1', '198.51.100.2/31'], array_slice($this->parcalar(), 0, 3));
+
+        $this->actingAs($this->bolen())
+            ->post(route('ip-addresses.halve', $this->parca('198.51.100.0/32')))
+            ->assertSessionHas('error', '/32 tek adrestir, ayrılmaz.');
+
+        $this->actingAs($this->bolen())
+            ->post(route('ip-addresses.halve', $this->blok))
+            ->assertSessionHas('error', 'Yalnız bir bloğun parçası ikiye ayrılır.');
+
+        /* Arkadaki yarı yeni kayıttır: "ekle" yetkisi olmadan ayrılmaz. */
+        $this->actingAs($this->kullanici(['view', 'update']))
+            ->post(route('ip-addresses.halve', $this->parca('198.51.100.0/32')))
+            ->assertForbidden();
+
+        $this->assertCount(66, $this->parcalar());
+    }
+
+    #[Test]
     public function bolme_gerekceyle_kaldirilir(): void
     {
-        $this->actingAs($this->bolen())->post(route('ip-addresses.split', $this->blok), ['layout' => '26x4']);
+        $this->bol([[26, '0-255', 4]])->assertSessionHasNoErrors();
         $silen = $this->kullanici(['view', 'delete']);
 
         $this->actingAs($silen)
@@ -213,7 +327,7 @@ class BlockSplitTest extends TestCase
     #[Test]
     public function silme_yetkisi_olmadan_bolme_kaldirilamaz(): void
     {
-        $this->actingAs($this->bolen())->post(route('ip-addresses.split', $this->blok), ['layout' => '25x2']);
+        $this->bol([[25, '0-255', 2]])->assertSessionHasNoErrors();
 
         $this->actingAs($this->kullanici(['view', 'update', 'create']))
             ->delete(route('ip-addresses.unsplit', $this->blok), ['reason' => 'deneme'])

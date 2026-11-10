@@ -52,7 +52,8 @@ class Ipv4BlockPlanTest extends TestCase
     #[Test]
     public function parca_satiri_gecit_ilk_son_ve_maske_tasir(): void
     {
-        $parca = $this->plan('192.0.2.0/24', '192.0.2.8/29', '192.0.2.16/31', '192.0.2.18/32')['blocks'][0]['parts'];
+        $satirlar = $this->plan('192.0.2.0/24', '192.0.2.8/29', '192.0.2.16/31', '192.0.2.18/32')['blocks'][0]['parts'];
+        $parca = array_values(array_filter($satirlar, fn (array $s): bool => ! $s['free']));
 
         $this->assertSame(
             ['192.0.2.8/29', '192.0.2.9', '192.0.2.10', '192.0.2.14', '255.255.255.248'],
@@ -82,7 +83,31 @@ class Ipv4BlockPlanTest extends TestCase
     public function hizasiz_blok_ag_adresine_oturur(): void
     {
         $this->assertSame('192.0.2.0/24', $this->plan('192.0.2.5/24', '192.0.2.8/29')['blocks'][0]['notation']);
-        $this->assertCount(1, $this->plan('192.0.2.5/24', '192.0.2.8/29')['blocks'][0]['parts']);
+        $this->assertSame(
+            ['192.0.2.0 – .7', '192.0.2.8/29', '192.0.2.16 – .255'],
+            array_column($this->plan('192.0.2.5/24', '192.0.2.8/29')['blocks'][0]['parts'], 'notation'),
+        );
+    }
+
+    /** Kısmen bölünmüş blokta bölünmemiş alan, parçaların arasında sırasıyla satırdır. */
+    #[Test]
+    public function bolunmemis_alan_satir_olarak_durur(): void
+    {
+        $blok = $this->plan('192.0.2.0/24', '192.0.2.0/26', '192.0.2.128/26')['blocks'][0];
+
+        $this->assertSame(['192.0.2.0/26', '192.0.2.64 – .127', '192.0.2.128/26', '192.0.2.192 – .255'], array_column($blok['parts'], 'notation'));
+        $this->assertSame([false, true, false, true], array_column($blok['parts'], 'free'));
+        $this->assertSame(['192.0.2.64', '192.0.2.127', 'Bölünmemiş'], [$blok['parts'][1]['first'], $blok['parts'][1]['last'], $blok['parts'][1]['stateLabel']]);
+        $this->assertSame('2 parça · 128 adres bölünmemiş', $blok['partsLabel']);
+    }
+
+    #[Test]
+    public function tam_bolunmus_blokta_bos_alan_satiri_yok(): void
+    {
+        $blok = $this->plan('192.0.2.0/24', '192.0.2.0/25', '192.0.2.128/25')['blocks'][0];
+
+        $this->assertSame([false, false], array_column($blok['parts'], 'free'));
+        $this->assertSame('2 parça', $blok['partsLabel']);
     }
 
     /** Başka gruptaki /24 parçayı sahiplenmez. */

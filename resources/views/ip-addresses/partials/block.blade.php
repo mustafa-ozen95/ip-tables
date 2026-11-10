@@ -1,7 +1,8 @@
 {{--
     Listede bir /24 blok (bkz. Ipv4BlockPlan). Satırın tamamı bağlantıdır,
     ayrıntıyı sağda açar. Bölünmüş bloğun parçalarını YALNIZ soldaki ok
-    açar; blok kapalı gelir (bkz. panel-custom.css, BLOK LİSTESİ).
+    açar; blok kapalı gelir (bkz. panel-custom.css, BLOK LİSTESİ). Kısmen
+    bölünmüş blokta bölünmemiş alan da tabloda bağlantısız satırdır.
 --}}
 @if ($block['parts'] !== [])
     <details class="block-node" @if ($block['open']) open @endif>
@@ -28,13 +29,17 @@
                         @foreach ($block['parts'] as $part)
                             <tr>
                                 <td class="table__cell--mono" data-label="Ağ">
-                                    <a href="{{ route('ip-addresses.index', ['grup' => $selectedGroup?->uuid, 'kayit' => $part['record']->uuid]) }}">{{ $part['notation'] }}</a>
+                                    @if ($part['free'])
+                                        {{ $part['notation'] }}
+                                    @else
+                                        <a href="{{ route('ip-addresses.index', ['grup' => $selectedGroup?->uuid, 'kayit' => $part['record']->uuid]) }}">{{ $part['notation'] }}</a>
+                                    @endif
                                 </td>
                                 <td class="table__cell--mono" data-label="Ağ geçidi">{{ $part['gateway'] ?? '—' }}</td>
                                 <td class="table__cell--mono" data-label="İlk adres">{{ $part['first'] }}</td>
                                 <td class="table__cell--mono" data-label="Son adres">{{ $part['last'] }}</td>
-                                <td class="table__cell--mono" data-label="Maske">{{ $part['mask'] }}</td>
-                                <td data-label="Ad">{{ $part['record']->name ?? '—' }}</td>
+                                <td class="table__cell--mono" data-label="Maske">{{ $part['mask'] ?? '—' }}</td>
+                                <td data-label="Ad">{{ $part['free'] ? $part['name'] : ($part['record']->name ?? '—') }}</td>
                                 <td data-label="Durum"><x-ui.badge :variant="$part['badge']">{{ $part['stateLabel'] }}</x-ui.badge></td>
                             </tr>
                         @endforeach

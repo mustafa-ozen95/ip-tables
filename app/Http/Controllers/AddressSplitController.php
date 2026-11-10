@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\IpAddress\HalveIpAddressRequest;
+use App\Http\Requests\IpAddress\MergeIpAddressRequest;
 use App\Http\Requests\IpAddress\SplitIpAddressRequest;
 use App\Http\Requests\IpAddress\UnsplitIpAddressRequest;
 use App\Models\IpAddress;
@@ -14,43 +16,70 @@ use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Routing\Controllers\Middleware;
 
 /**
- * /24 bloğun bölmesi: böl ve bölmeyi kaldır. İkisi de listeye, bloğu
- * seçili olarak döner; bölmeden sonra parçaları da açık gelir.
+ * /24 bloğun bölmesi: böl, bölmeyi kaldır, parçayı birleştir ya da ikiye
+ * ayır. Hepsi listeye, kaydı seçili ve bloğu açık olarak döner.
  */
 class AddressSplitController extends Controller implements HasMiddleware
 {
-    public function __construct(private IpAddressWriter $writer) {}
+    public function __construct(private IpAddressWriter $writer, private Ipv4BlockRules $rules) {}
 
     public static function middleware(): array
     {
         return [
-            new Middleware('can:update,ipAddress', only: ['store']),
-            new Middleware('can:delete,ipAddress', only: ['destroy']),
+            new Middleware('can:update,ipAddress', only: ['store', 'merge', 'halve']),
+            new Middleware('can:delete,ipAddress', only: ['destroy', 'merge']),
         ];
     }
 
     public function store(SplitIpAddressRequest $request, IpAddress $ipAddress): RedirectResponse
     {
         $parts = $request->parts();
+
+        /* Önizleme: pencere aynı satırlarla, sonuç özetiyle yeniden açılır. */
+        if ($request->preview()) {
+            return redirect()
+                ->route('ip-addresses.index', ['grup' => $ipAddress->group->uuid, 'kayit' => $ipAddress->uuid, 'pencere' => 'bol'])
+                ->withInput($request->except('onizle'))
+                ->with('splitPreview', count($parts).' parça: '.$request->layout());
+        }
+
         $this->writer->split($ipAddress, $parts, $request->layout());
 
-        return $this->show($ipAddress, "{$ipAddress->notation} ".count($parts).' parçaya bölündü.', open: true);
+        return $this->show($ipAddress, $ipAddress, "{$ipAddress->notation} içinde ".count($parts).' parça açıldı.');
     }
 
-    public function destroy(UnsplitIpAddressRequest $request, IpAddress $ipAddress, Ipv4BlockRules $rules): RedirectResponse
+    public function destroy(UnsplitIpAddressRequest $request, IpAddress $ipAddress): RedirectResponse
     {
-        $this->writer->unsplit($ipAddress, $rules->parts($ipAddress), $request->string('reason')->value());
+        $this->writer->unsplit($ipAddress, $this->rules->parts($ipAddress), $request->string('reason')->value());
 
-        return $this->show($ipAddress, "{$ipAddress->notation} bölmesi kaldırıldı.");
+        return $this->show($ipAddress, null, "{$ipAddress->notation} bölmesi kaldırıldı.");
     }
 
-    private function show(IpAddress $ipAddress, string $message, bool $open = false): RedirectResponse
+    public function merge(MergeIpAddressRequest $request, IpAddress $ipAddress): RedirectResponse
+    {
+        $block = $this->rules->blockOf($ipAddress);
+        $kept = $this->writer->merge($ipAddress, $request->buddy(), $request->merged());
+
+        return $this->show($kept, $block, "Parçalar {$kept->notation} olarak birleştirildi.");
+    }
+
+    public function halve(HalveIpAddressRequest $request, IpAddress $ipAddress): RedirectResponse
+    {
+        $block = $this->rules->blockOf($ipAddress);
+        [$first, $second] = $request->halves();
+        $this->writer->halve($ipAddress, [$first, $second]);
+
+        return $this->show($ipAddress, $block, "Parça {$first->notation()} ve {$second->notation()} olarak ayrıldı.");
+    }
+
+    /** $open: parçaları açık gelecek blok. */
+    private function show(IpAddress $selected, ?IpAddress $open, string $message): RedirectResponse
     {
         return redirect()
             ->route('ip-addresses.index', [
-                'grup' => $ipAddress->group->uuid,
-                'kayit' => $ipAddress->uuid,
-                'blok' => $open ? $ipAddress->uuid : null,
+                'grup' => $selected->group->uuid,
+                'kayit' => $selected->uuid,
+                'blok' => $open?->uuid,
             ])
             ->with('status', $message);
     }

@@ -78,6 +78,54 @@ class IpAddressWriter
         });
     }
 
+    /**
+     * Sıralı iki eş parçayı bir üst boya birleştirir. Kalan kayıt adı olan
+     * parçadır (ikisi de adsızsa öndeki); adı, açıklaması ve alt grubu
+     * birleşen parçaya geçer, öbürü silinir. Kalan kaydı döndürür.
+     */
+    public function merge(IpAddress $part, IpAddress $buddy, ParsedAddress $merged): IpAddress
+    {
+        $buddy->loadMissing('group');
+        [$keep, $drop] = filled($buddy->name) ? [$buddy, $part] : [$part, $buddy];
+        $before = $this->describe($part).' + '.$buddy->notation;
+
+        DB::transaction(function () use ($keep, $drop, $merged, $before): void {
+            $drop->delete();
+
+            $keep->forceFill(['address' => $merged->address, 'prefix' => $merged->prefix, 'sort_key' => $merged->sortKey])->save();
+
+            $this->activity->record(ActivityAction::Updated, "Parçalar birleştirildi: {$before} → {$keep->notation}", $keep);
+        });
+
+        return $keep;
+    }
+
+    /**
+     * Parçayı iki eş parçaya ayırır: kayıt öndeki yarı olur ve adını korur,
+     * arkadaki yarı adsız açılır.
+     *
+     * @param  array{0: ParsedAddress, 1: ParsedAddress}  $halves
+     */
+    public function halve(IpAddress $part, array $halves): void
+    {
+        $part->loadMissing(['group', 'subGroup']);
+
+        DB::transaction(function () use ($part, $halves): void {
+            $before = $this->describe($part);
+
+            $part->forceFill(['address' => $halves[0]->address, 'prefix' => $halves[0]->prefix, 'sort_key' => $halves[0]->sortKey])->save();
+
+            $this->fill(new IpAddress, [
+                'group' => $part->group,
+                'subGroup' => $part->subGroup,
+                'parsed' => $halves[1],
+                'details' => ['name' => null, 'description' => null],
+            ])->save();
+
+            $this->activity->record(ActivityAction::Updated, "Parça ikiye ayrıldı: {$before} → {$halves[0]->notation()} + {$halves[1]->notation()}", $part);
+        });
+    }
+
     /** @param  Collection<int, IpAddress>  $parts */
     public function unsplit(IpAddress $block, Collection $parts, string $reason): void
     {

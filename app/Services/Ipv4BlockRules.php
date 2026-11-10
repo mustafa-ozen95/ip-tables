@@ -12,11 +12,13 @@ use Illuminate\Database\Eloquent\Collection;
 /**
  * IPv4 blok kuralı. Elle eklenebilen IPv4 kaydı yalnız /24 BLOKTUR. Daha
  * küçüğü (/25–/32) elle eklenmez: blok BÖLÜNÜR ve parçalar kayıt olarak
- * açılır (bkz. Ipv4SplitLayout, IpAddressWriter::split).
+ * açılır (bkz. Ipv4SplitLayout, IpAddressWriter::split). Blok bir kerede
+ * tam bölünmek zorunda değildir; bölünmemiş alan sonra bölünür.
  *
- * Bölme TEK KATTIR: parçalar eşit ya da farklı boyda olabilir ama bir
- * parça yeniden bölünmez, /25'in içinde /26 olmaz. Yanlış bölme parça parça
- * düzeltilmez; bölme kaldırılır, blok yeniden bölünür.
+ * Bölme TEK KATTIR: parçalar eşit ya da farklı boyda olabilir ama iç içe
+ * olmaz, /25'in içinde /26 durmaz. Parçanın boyu yerinde değişir: sıralı
+ * iki eş parça BİRLEŞİR (/29 + /29 → /28), bir parça İKİYE AYRILIR
+ * (/28 → /29 + /29); ikisinde de tek kat korunur.
  *
  * Kural ekleme, düzenleme ve silmede AYNI yerden sınanır: parçanın adresini
  * değiştirmek ya da onu tek başına silmek bölmeyi bozardı, bölünmüş bloğu
@@ -93,6 +95,96 @@ class Ipv4BlockRules
             ->values();
     }
 
+    /**
+     * Parçaların blok içinde kapladığı aralıklar (0–255).
+     *
+     * @param  Collection<int, IpAddress>  $parts
+     * @return list<array{start: int, end: int}>
+     */
+    public function taken(IpAddress $block, Collection $parts): array
+    {
+        $base = ip2long(Cidr::make($block->address, self::BLOCK_PREFIX)->network);
+
+        return $parts->map(function (IpAddress $part) use ($base): array {
+            $start = ip2long(Cidr::make($part->address, $part->prefix)->network) - $base;
+
+            return ['start' => $start, 'end' => $start + 2 ** (32 - $part->prefix) - 1];
+        })->values()->all();
+    }
+
+    /** Bloğun bölünmemiş alanı var mı: parçalar 256 adresi doldurmuyor. */
+    public function hasFreeSpace(IpAddress $block): bool
+    {
+        return array_sum(array_map(fn (array $t): int => $t['end'] - $t['start'] + 1, $this->taken($block, $this->parts($block))))
+            < 2 ** (32 - self::BLOCK_PREFIX);
+    }
+
+    /**
+     * Parçanın birleşebileceği eşi: aynı boyda, birlikte bir üst boyu
+     * hizalı dolduran komşu parça (.0/29'un eşi .8/29). Yoksa null.
+     */
+    public function buddy(IpAddress $part): ?IpAddress
+    {
+        $block = $this->blockOf($part);
+
+        if ($block === null || $part->prefix - 1 < Ipv4SplitLayout::MIN_PREFIX) {
+            return null;
+        }
+
+        $own = ip2long(Cidr::make($part->address, $part->prefix)->network);
+        $size = 2 ** (32 - $part->prefix);
+        $other = long2ip($own % (2 * $size) === 0 ? $own + $size : $own - $size);
+
+        return $this->parts($block)->first(
+            fn (IpAddress $p): bool => $p->prefix === $part->prefix && Cidr::make($p->address, $p->prefix)->network === $other,
+        );
+    }
+
+    /** Birleştirmenin hatası; birleşebiliyorsa null. */
+    public function mergeError(IpAddress $part): ?string
+    {
+        if ($this->blockOf($part) === null) {
+            return 'Yalnız bir bloğun parçası birleştirilir.';
+        }
+
+        if ($part->prefix - 1 < Ipv4SplitLayout::MIN_PREFIX) {
+            return '/'.Ipv4SplitLayout::MIN_PREFIX.' parçalar birleşmez; bloğun tamamı için bölmeyi kaldırın.';
+        }
+
+        $buddy = $this->buddy($part);
+
+        return match (true) {
+            $buddy === null => 'Birleşecek eş parça yok: '.$this->buddyNotation($part).' bölünmüş ve aynı boyda olmalı.',
+            filled($part->name) && filled($buddy->name) => 'İki parçanın da adı var; birleştirmek için birini boşaltın.',
+            default => null,
+        };
+    }
+
+    /** İkiye ayırmanın hatası; ayrılabiliyorsa null. */
+    public function halveError(IpAddress $part): ?string
+    {
+        return match (true) {
+            $this->blockOf($part) === null => 'Yalnız bir bloğun parçası ikiye ayrılır.',
+            $part->prefix >= Ipv4SplitLayout::MAX_PREFIX => '/'.Ipv4SplitLayout::MAX_PREFIX.' tek adrestir, ayrılmaz.',
+            default => null,
+        };
+    }
+
+    /** Birleşince çıkacak parça: "192.0.2.0/28". */
+    public function mergedNotation(IpAddress $part): string
+    {
+        return Cidr::make($part->address, $part->prefix - 1)->toString();
+    }
+
+    /** Parçanın eşinin olması gereken yer: "192.0.2.8/29". */
+    public function buddyNotation(IpAddress $part): string
+    {
+        $own = ip2long(Cidr::make($part->address, $part->prefix)->network);
+        $size = 2 ** (32 - $part->prefix);
+
+        return long2ip($own % (2 * $size) === 0 ? $own + $size : $own - $size)."/{$part->prefix}";
+    }
+
     /** Kaydı içeren, aynı gruptaki /24 blok; kayıt bir parça değilse null. */
     public function blockOf(IpAddress $record): ?IpAddress
     {
@@ -103,10 +195,13 @@ class Ipv4BlockRules
         $own = Cidr::make($record->address, $record->prefix);
 
         /* Adresle süzülmez: hizasız girilmiş blok (192.0.2.5/24) da bloktur. */
-        return $record->group->ipAddresses()
+        $block = $record->group->ipAddresses()
             ->where('prefix', self::BLOCK_PREFIX)
             ->get()
             ->first(fn (IpAddress $b): bool => Cidr::make($b->address, $b->prefix)->contains($own));
+
+        /* Grup aynıdır; parts() onu yeniden sorgulamasın. */
+        return $block?->setRelation('group', $record->group);
     }
 
     private function unchanged(IpAddress $record, AddressGroup $group, ParsedAddress $parsed): bool

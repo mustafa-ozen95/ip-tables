@@ -110,6 +110,26 @@
                            class="btn btn--sm" data-modal-open="block-split">Böl</a>
                     @endif
 
+                    @if ($selected['canMerge'])
+                        <form method="POST" action="{{ route('ip-addresses.merge', $selected['model']) }}" data-inline
+                              data-confirm="{{ $selected['mergeLabel'] }}. Adı olan parça kalır, öbürü silinir."
+                              data-confirm-title="Parçaları birleştir"
+                              data-confirm-reasonless>
+                            @csrf
+                            <button type="submit" class="btn btn--sm">Birleştir</button>
+                        </form>
+                    @endif
+
+                    @if ($selected['canHalve'])
+                        <form method="POST" action="{{ route('ip-addresses.halve', $selected['model']) }}" data-inline
+                              data-confirm="{{ $selected['halveLabel'] }}. Bu kayıt öndeki yarı olur ve adını korur; arkadaki yarı boş açılır."
+                              data-confirm-title="İkiye ayır"
+                              data-confirm-reasonless>
+                            @csrf
+                            <button type="submit" class="btn btn--sm">İkiye ayır</button>
+                        </form>
+                    @endif
+
                     @if ($selected['canUnsplit'])
                         <x-ui.delete-form :action="route('ip-addresses.unsplit', $selected['model'])"
                                           confirm="{{ $selected['notation'] }} bölmesi kaldırılacak; {{ $selected['partCount'] }} parça adlarıyla birlikte silinecek."
@@ -156,23 +176,55 @@
                               :sub-group-map="$subGroupMap" />
     @endif
 
-    {{-- Böl: /24'ü parçalara ayırır (bkz. Ipv4SplitLayout). --}}
+    {{--
+        Böl: /24'ün boş alanını aralık aralık böler (bkz. Ipv4SplitLayout).
+        Form YERİNDE (data-inline) gönderilmez: yerinde gönderim basılan
+        düğmeyi taşımıyor, "Önizle" ile "Böl" ayrılamazdı.
+    --}}
     @if ($selected && $selected['canSplit'] && ! in_array($window, ['ekle', 'duzenle'], true))
         <x-ui.modal id="block-split" :title="$selected['notation'].' bölünecek'" :open="$window === 'bol'">
-            <form method="POST" action="{{ route('ip-addresses.split', $selected['model']) }}" autocomplete="off" data-inline>
+            <form method="POST" action="{{ route('ip-addresses.split', $selected['model']) }}" autocomplete="off" data-conditional-form>
                 @csrf
                 <input type="hidden" name="_pencere" value="bol">
 
-                <div class="modal__body">
+                <div class="modal__body stack">
                     <x-ui.errors class="modal__alert" />
 
-                    <x-form.field name="layout" label="Parçalar"
-                                  hint="Boyları blok başından sırayla yazın; son boy bloğun sonuna kadar tekrarlanır. 29 = 32 tane /29; 28x2 29 = iki /28, kalanı /29; 29x10 28x2 27 … gibi karışık da olur. Bölme tek kattır.">
-                        <x-form.input name="layout" mono required maxlength="500" spellcheck="false" />
+                    @if ($selected['split']['preview'])
+                        <div class="alert alert--info">Önizleme: {{ $selected['split']['preview'] }}</div>
+                    @endif
+
+                    <p class="field__hint">Boş alan: {{ $selected['split']['free'] }}</p>
+
+                    <x-form.field name="ranges.0.prefix" id="split-0-prefix" label="Subnet">
+                        <x-form.select name="ranges[0][prefix]" id="split-0-prefix"
+                                       :options="$selected['split']['prefixes']" :selected="$selected['split']['row']['prefix']" />
                     </x-form.field>
+
+                    <x-form.field name="ranges.0.count" id="split-0-count" label="Adet">
+                        <x-form.select name="ranges[0][count]" id="split-0-count"
+                                       :options="$selected['split']['counts']" :selected="$selected['split']['row']['count']"
+                                       data-linked="ranges[0][prefix]"
+                                       data-linked-options="{{ json_encode($selected['split']['countMap']) }}" />
+                    </x-form.field>
+
+                    <x-form.field name="ranges.0.slot" id="split-0-slot" label="Müsait aralık">
+                        <x-form.select name="ranges[0][slot]" id="split-0-slot"
+                                       :options="$selected['split']['slots']" :selected="$selected['split']['row']['slot']"
+                                       data-linked="ranges[0][count]"
+                                       data-linked-options="{{ json_encode($selected['split']['slotMap']) }}" />
+                    </x-form.field>
+
+                    <p class="field__hint">
+                        Sırayla subnet, kaç parça, sonra aralık: aralık listesi o kadar parçanın art arda sığdığı boş yerleri
+                        gösterir (/29, 10 parça → .0 – .79). Kalan boş alan sonra yine bölünür; başka boy için Böl'ü yeniden
+                        açın. /31 ve /32 için parçayı "İkiye ayır".
+                    </p>
                 </div>
 
-                <x-ui.modal-actions submit="Böl" />
+                <x-ui.modal-actions submit="Böl">
+                    <button type="submit" name="onizle" value="1" class="btn">Önizle</button>
+                </x-ui.modal-actions>
             </form>
         </x-ui.modal>
     @endif

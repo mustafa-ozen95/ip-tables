@@ -17,11 +17,16 @@ use Illuminate\Support\Collection;
  * Doluluk ADI verilmiş parçalardır: bölme parçaları adsız açar, atama
  * parçaya ad vererek yapılır. Bölünmemiş blok "Boş" sayılır.
  *
+ * Blok kısmen bölünebilir: parçaların arasında kalan BÖLÜNMEMİŞ ALAN da
+ * parça tablosunda satır olarak durur, sonra bölünecek yer görünsün.
+ *
  * Bloğa girmeyen her kayıt (IPv6, kuraldan önce girilmiş /32'ler, geniş
  * bloklar) "diğerleri"dir ve listede düz satır olarak durur.
  */
 class Ipv4BlockPlan
 {
+    public function __construct(private Ipv4SplitLayout $layout = new Ipv4SplitLayout) {}
+
     /**
      * Blok açık gelir: uuid'i $openBlock ise (bölmeden dönüş) ya da
      * seçili kayıt ($selected) onun parçasıysa.
@@ -91,13 +96,28 @@ class Ipv4BlockPlan
     {
         usort($parts, fn (array $a, array $b): int => [$a['start'], $a['record']->prefix] <=> [$b['start'], $b['record']->prefix]);
 
-        $rows = array_map(fn (array $p): array => $this->part($p['record']), $parts);
         $used = $this->union(array_filter($parts, fn (array $p): bool => filled($p['record']->name)));
+        $free = $parts === [] ? [] : $this->layout->free(array_map(fn (array $p): array => [
+            'start' => $p['start'] - $block['start'],
+            'end' => $p['start'] - $block['start'] + 2 ** (32 - $p['record']->prefix) - 1,
+        ], $parts));
+
+        $rows = [
+            ...array_map(fn (array $p): array => ['at' => $p['start'], ...$this->part($p['record'])], $parts),
+            ...array_map(fn (array $f): array => ['at' => $block['start'] + $f['start'], ...$this->freeRow($block['start'], $f)], $free),
+        ];
+        usort($rows, fn (array $a, array $b): int => $a['at'] <=> $b['at']);
+
+        $freeCount = array_sum(array_map(fn (array $f): int => $f['end'] - $f['start'] + 1, $free));
 
         return [
             'record' => $block['record'],
             'notation' => long2ip($block['start']).'/24',
-            'partsLabel' => count($rows) > 0 ? count($rows).' parça' : 'Bölünmedi',
+            'partsLabel' => match (true) {
+                $parts === [] => 'Bölünmedi',
+                $freeCount > 0 => count($parts)." parça · {$freeCount} adres bölünmemiş",
+                default => count($parts).' parça',
+            },
             'used' => $used,
             ...$this->state($used, 256),
             'open' => ($openBlock !== null && $block['record']->uuid === $openBlock)
@@ -119,6 +139,7 @@ class Ipv4BlockPlan
         $used = filled($record->name);
 
         return [
+            'free' => false,
             'record' => $record,
             'notation' => $cidr->toString(),
             'gateway' => $hosts ? $cidr->firstUsable() : null,
@@ -128,6 +149,28 @@ class Ipv4BlockPlan
             ...$used
                 ? ['stateLabel' => 'Dolu', 'badge' => BadgeVariant::Red]
                 : ['stateLabel' => 'Boş', 'badge' => BadgeVariant::Green],
+        ];
+    }
+
+    /**
+     * Bölünmemiş alan satırı: parça değildir, bağlantısı yok; Böl ile parçalanır.
+     *
+     * @param  array{start: int, end: int}  $free
+     * @return array<string, mixed>
+     */
+    private function freeRow(int $blockStart, array $free): array
+    {
+        return [
+            'free' => true,
+            'record' => null,
+            'notation' => long2ip($blockStart + $free['start']).' – .'.$free['end'],
+            'gateway' => null,
+            'first' => long2ip($blockStart + $free['start']),
+            'last' => long2ip($blockStart + $free['end']),
+            'mask' => null,
+            'name' => ($free['end'] - $free['start'] + 1).' adres',
+            'stateLabel' => 'Bölünmemiş',
+            'badge' => BadgeVariant::Gray,
         ];
     }
 
