@@ -25,7 +25,10 @@ use Illuminate\Support\Collection;
  */
 class Ipv4BlockPlan
 {
-    public function __construct(private Ipv4SplitLayout $layout = new Ipv4SplitLayout) {}
+    public function __construct(
+        private Ipv4SplitLayout $layout = new Ipv4SplitLayout,
+        private GatewayPingStatus $ping = new GatewayPingStatus,
+    ) {}
 
     /**
      * Blok açık gelir: uuid'i $openBlock ise (bölmeden dönüş) ya da
@@ -96,7 +99,8 @@ class Ipv4BlockPlan
     {
         usort($parts, fn (array $a, array $b): int => [$a['start'], $a['record']->prefix] <=> [$b['start'], $b['record']->prefix]);
 
-        $used = $this->union(array_filter($parts, fn (array $p): bool => filled($p['record']->name)));
+        /* Adı olan ya da gateway'i ping alan parça kullanılıyor (bkz. GatewayPing). */
+        $used = $this->union(array_filter($parts, fn (array $p): bool => $this->inUse($p['record'])));
         $free = $parts === [] ? [] : $this->layout->free(array_map(fn (array $p): array => [
             'start' => $p['start'] - $block['start'],
             'end' => $p['start'] - $block['start'] + 2 ** (32 - $p['record']->prefix) - 1,
@@ -119,8 +123,10 @@ class Ipv4BlockPlan
                 default => count($parts).' parça',
             },
             'used' => $used,
-            'hasFree' => $parts === [] || $freeCount > 0,
-            ...$this->state($used, 256),
+            ...($parts === [] && $block['record']->gateway_up
+                ? ['state' => 'full', 'stateLabel' => 'Kullanılıyor', 'badge' => BadgeVariant::Red]
+                : $this->state($used, 256)),
+            'ping' => $parts === [] ? $this->ping->of($block['record']) : null,
             'open' => ($openBlock !== null && $block['record']->uuid === $openBlock)
                 || ($selected !== null && in_array($selected, array_map(fn (array $p): string => (string) $p['record']->uuid, $parts), true)),
             'parts' => $rows,
@@ -137,7 +143,6 @@ class Ipv4BlockPlan
     {
         $cidr = Cidr::make($record->address, $record->prefix);
         $hosts = ! $cidr->isSingleHost() && ! $cidr->isPointToPoint();
-        $used = filled($record->name);
 
         return [
             'free' => false,
@@ -147,10 +152,18 @@ class Ipv4BlockPlan
             'first' => $hosts ? long2ip(ip2long($cidr->firstUsable()) + 1) : $cidr->firstUsable(),
             'last' => $cidr->lastUsable(),
             'mask' => $cidr->netmask(),
-            ...$used
-                ? ['stateLabel' => 'Dolu', 'badge' => BadgeVariant::Red]
-                : ['stateLabel' => 'Boş', 'badge' => BadgeVariant::Green],
+            'ping' => $this->ping->of($record),
+            ...match (true) {
+                filled($record->name) => ['stateLabel' => 'Dolu', 'badge' => BadgeVariant::Red],
+                (bool) $record->gateway_up => ['stateLabel' => 'Kullanılıyor', 'badge' => BadgeVariant::Red],
+                default => ['stateLabel' => 'Boş', 'badge' => BadgeVariant::Green],
+            },
         ];
+    }
+
+    private function inUse(IpAddress $record): bool
+    {
+        return filled($record->name) || $record->gateway_up === true;
     }
 
     /**
@@ -169,6 +182,7 @@ class Ipv4BlockPlan
             'first' => long2ip($blockStart + $free['start']),
             'last' => long2ip($blockStart + $free['end']),
             'mask' => null,
+            'ping' => null,
             'name' => ($free['end'] - $free['start'] + 1).' adres',
             'stateLabel' => 'Bölünmemiş',
             'badge' => BadgeVariant::Gray,

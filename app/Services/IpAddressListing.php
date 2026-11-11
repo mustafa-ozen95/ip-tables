@@ -20,9 +20,9 @@ use Illuminate\Http\Request;
  * Ipv4BlockPlan); diğer kayıtlar düz satırdır. Arama sonucu düz listedir:
  * eşleşen parça, bloğu eşleşmese de görünmeli.
  *
- * Ayrıntı sütunu yok: satırın sonunda Düzenle, Böl ve ⋮ durur. ⋮ kaydın
- * bilgisini ve kalan işlemleri pencerede açar ("islemler"); o işlemlerin
- * kuralları yalnız seçili kayıt için hesaplanır (selected).
+ * Ayrıntı sütunu yok: satırın sonunda ⋮ durur; kaydın bilgisini ve
+ * işlemlerini pencerede açar ("islemler"). İşlemlerin kuralları yalnız
+ * seçili kayıt için hesaplanır (selected).
  *
  * Her sorgu kullanıcıya göre DARALTILIR (visibleTo): görülmeyen grubun
  * adresi ne listede, ne sayıda, ne ayrıntıda görünür. Sayfa parametreleri
@@ -35,6 +35,7 @@ class IpAddressListing
         private Ipv4BlockPlan $plan,
         private Ipv4BlockRules $rules,
         private Ipv4SplitLayout $layout,
+        private GatewayPingStatus $ping,
     ) {}
 
     /** @return array<string, mixed> */
@@ -50,15 +51,13 @@ class IpAddressListing
         $selected = $this->selected($request, $user);
         $window = $this->window($request, $selected);
         $creatable = $this->creatableGroups($user, $groups);
-        $rowCan = $this->rowAbilities($user, $groups);
 
         return [
             'groups' => $groups,
             'allCount' => $groups->sum('ip_addresses_count'),
             'selectedGroup' => $selectedGroup,
             'query' => $query,
-            'sections' => $this->sections($user, $selectedGroup, $query, $request->string('blok')->toString() ?: null, $selected['uuid'] ?? null, $rowCan),
-            'rowCan' => $rowCan,
+            'sections' => $this->sections($user, $selectedGroup, $query, $request->string('blok')->toString() ?: null, $selected['uuid'] ?? null),
             'selected' => $selected,
             'window' => $window,
             'canCreate' => $creatable !== [],
@@ -76,10 +75,7 @@ class IpAddressListing
      *
      * @return array<int, array{title: string|null, blocks: list<array<string, mixed>>, rows: Collection<int, IpAddress>}>
      */
-    /**
-     * @param  array<int, array{update: bool, split: bool}>  $rowCan
-     */
-    private function sections(User $user, ?AddressGroup $group, string $query, ?string $openBlock, ?string $selected, array $rowCan): array
+    private function sections(User $user, ?AddressGroup $group, string $query, ?string $openBlock, ?string $selected): array
     {
         $records = IpAddress::query()->visibleTo($user)
             ->when($group, fn ($q, AddressGroup $g) => $q->whereBelongsTo($g, 'group'))
@@ -93,9 +89,6 @@ class IpAddressListing
         }
 
         $plan = $this->plan->build($records, $openBlock, $selected);
-        $plan['blocks'] = array_map(fn (array $b): array => [
-            ...$b, 'canSplit' => $b['hasFree'] && ($rowCan[$b['record']->address_group_id]['split'] ?? false),
-        ], $plan['blocks']);
         $rows = new Collection($plan['others']);
 
         if ($group === null || $group->subGroups->isEmpty()) {
@@ -140,6 +133,7 @@ class IpAddressListing
                 'Ad' => $model->name,
                 'Eklendi' => $model->created_at?->translatedFormat('d.m.Y H:i'),
                 'Güncellendi' => $model->updated_at?->translatedFormat('d.m.Y H:i'),
+                ...($ping = $this->ping->of($model)) ? ['Gateway ping' => $ping['label']] : [],
             ],
             'description' => $model->description,
             'canUpdate' => $user->can('update', $model),
@@ -278,26 +272,6 @@ class IpAddressListing
             'islemler' => $selected !== null ? 'islemler' : null,
             default => null,
         };
-    }
-
-    /**
-     * Satır sonundaki düğmeler için grup başına yetki (grup kimliği =>
-     * düzenle, böl). Yetki gruba bağlı; satır satır sorulmaz. Böl kayıt
-     * açar: düzenle yanında ekle de gerekir (bkz. SplitIpAddressRequest).
-     *
-     * @param  Collection<int, AddressGroup>  $groups
-     * @return array<int, array{update: bool, split: bool}>
-     */
-    private function rowAbilities(User $user, Collection $groups): array
-    {
-        return $groups->mapWithKeys(function (AddressGroup $g) use ($user): array {
-            $update = $this->resolver->allows($user, IpAddressPolicy::RESOURCE, 'update', $g->getKey());
-
-            return [$g->getKey() => [
-                'update' => $update,
-                'split' => $update && $this->resolver->allows($user, IpAddressPolicy::RESOURCE, 'create', $g->getKey()),
-            ]];
-        })->all();
     }
 
     /**

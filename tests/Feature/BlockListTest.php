@@ -18,7 +18,7 @@ use Tests\TestCase;
 
 /**
  * Adres listesinde /24 bloklar: katlanır satır, parçalar altında tablo.
- * Düzenle ve Böl satırın sonunda, kalan işlemler ⋮ penceresinde.
+ * Satırın sonunda yalnız ⋮; işlemler onun penceresinde.
  *
  * Adresler belgeleme aralıklarındandır (RFC 5737 / 3849).
  */
@@ -112,27 +112,35 @@ class BlockListTest extends TestCase
             ->assertDontSee('block-node');
     }
 
-    /** Böl düğmesi (satır sonunda) ve penceresi yalnız bölebilene; izleyici adresi elle yazsa da açılmaz. */
+    /**
+     * Satırda yalnız ⋮ (üzerine gelince düğme belirmez). Böl ve Düzenle ⋮
+     * penceresinde, yalnız yetkiliye; izleyici adresi elle yazsa da açılmaz.
+     */
     #[Test]
-    public function bol_satirda_yalniz_yetkiliye(): void
+    public function bol_pencerede_yalniz_yetkiliye(): void
     {
         $blok = $this->adres('198.51.100.0/24');
         $pencere = ['kayit' => $blok->uuid, 'pencere' => 'bol'];
+        $yetkili = $this->kullanici(['view', 'update', 'create']);
 
-        $this->liste($this->kullanici())
+        $this->liste($yetkili)
             ->assertOk()
+            ->assertSee($this->bagla($blok, 'islemler'))
             ->assertDontSee($this->bagla($blok, 'bol'))
-            ->assertDontSee($this->bagla($blok, 'duzenle'))
-            ->assertSee($this->bagla($blok, 'islemler'));
+            ->assertDontSee('table__row-actions', false);
+
+        $this->liste($this->kullanici(), ['kayit' => $blok->uuid, 'pencere' => 'islemler'])
+            ->assertDontSee($this->bagla($blok, 'bol'))
+            ->assertDontSee($this->bagla($blok, 'duzenle'));
 
         $this->liste($this->kullanici(), $pencere)
             ->assertDontSee(route('ip-addresses.split', $blok), false);
 
-        $this->liste($this->kullanici(['view', 'update', 'create']))
+        $this->liste($yetkili, ['kayit' => $blok->uuid, 'pencere' => 'islemler'])
             ->assertSee($this->bagla($blok, 'bol'))
             ->assertSee($this->bagla($blok, 'duzenle'));
 
-        $this->liste($this->kullanici(['view', 'update', 'create']), $pencere)
+        $this->liste($yetkili, $pencere)
             ->assertOk()
             ->assertSee(route('ip-addresses.split', $blok), false)
             ->assertSee('198.51.100.0/24 bölünecek');
@@ -153,7 +161,7 @@ class BlockListTest extends TestCase
             ->assertSeeInOrder(['Grup A', '198.51.100.0/24', 'Önek', '/24', 'musteri-a']);
     }
 
-    /** Satır sonundaki bağlantı: bu kaydın bu penceresi. */
+    /** Bu kaydın bu penceresinin adresi. */
     private function bagla(IpAddress $kayit, string $pencere): string
     {
         return route('ip-addresses.index', ['grup' => $this->grup->uuid, 'kayit' => $kayit->uuid, 'pencere' => $pencere]);
@@ -220,7 +228,7 @@ class BlockListTest extends TestCase
             ->assertOk()
             ->assertSee('1 parça · 192 adres bölünmemiş')
             ->assertSeeInOrder(['198.51.100.0/26', '198.51.100.64 – .255', '192 adres', 'Bölünmemiş'])
-            ->assertSee($this->bagla($blok, 'bol'))
+            ->assertSee('198.51.100.0/24 bölünecek')
             ->assertSee('Boş alan: 198.51.100.64 – .255 (192 adres)')
             ->assertSee('name="ranges[0][prefix]"', false)
             ->assertDontSee('name="ranges[1][prefix]"', false)

@@ -2,6 +2,9 @@
 <span class="address-row__address block-node__address">
     <span @class(['block-node__toggle', 'block-node__toggle--none' => $block['parts'] === []]) aria-hidden="true"></span>
     <span class="mono truncate">{{ $block['notation'] }}</span>
+    @if ($block['ping'])
+        @include('ip-addresses.partials.ping-dot', ['ping' => $block['ping']])
+    @endif
 </span>
 
 <span class="address-row__name truncate">
@@ -18,5 +21,5 @@
 <span class="address-row__description text-sm text-muted truncate">{{ $block['partsLabel'] }}@if ($block['record']->description) · {{ $block['record']->description }}@endif</span>
 
 <span class="address-row__actions">
-    @include('ip-addresses.partials.row-actions', ['record' => $block['record'], 'canEdit' => $rowCan[$block['record']->address_group_id]['update'] ?? false, 'canSplit' => $block['canSplit']])
+    @include('ip-addresses.partials.row-actions', ['record' => $block['record']])
 </span>

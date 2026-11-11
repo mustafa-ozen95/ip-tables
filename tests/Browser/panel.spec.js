@@ -74,7 +74,7 @@ test('liste uc sutun olarak cizilir', async ({ page }, testInfo) => {
 
     // Gruplardan biri seçilip adresin ⋮ penceresi açılır (ayrıntı sütunu yok).
     await page.locator('.row-item', { hasText: 'IPv4' }).first().click();
-    await page.locator('.grid-row a[title="Diğer işlemler"]').first().click();
+    await page.locator('.grid-row a[title="İşlemler"]').first().click();
 
     await expect(page).toHaveURL(/kayit=/);
     await expect(page.locator('#record-actions')).toBeVisible();
@@ -144,7 +144,7 @@ test('alttaki kayit secilince liste en uste kaymaz', async ({ page }) => {
     const once = await govde.evaluate((el) => el.scrollTop);
     test.skip(once === 0, 'Liste kaydırılacak kadar uzun değil.');
 
-    await page.locator('.column--fill .grid-row a[title="Diğer işlemler"]').last().click();
+    await page.locator('.column--fill .grid-row a[title="İşlemler"]').last().click();
     await expect(page).toHaveURL(/kayit=/);
     await expect(page.locator('#record-actions')).toBeVisible();
 

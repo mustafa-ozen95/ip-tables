@@ -110,6 +110,9 @@ RUN apt-get update \
       gosu \
       openssl \
       curl \
+      # Gateway ping (gateways:ping, zamanlayıcı ipt olarak çalıştırır):
+      # Docker ping_group_range'i açık verir; paket de cap_net_raw koyar.
+      iputils-ping \
  && rm -rf /var/lib/apt/lists/* \
  && ln -snf /usr/share/zoneinfo/${TZ} /etc/localtime
 

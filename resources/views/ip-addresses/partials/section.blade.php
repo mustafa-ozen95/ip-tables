@@ -27,7 +27,7 @@
         <span class="address-row__description text-sm text-muted truncate">{{ $row->description ?? '' }}</span>
 
         <span class="address-row__actions">
-            @include('ip-addresses.partials.row-actions', ['record' => $row, 'canEdit' => $rowCan[$row->address_group_id]['update'] ?? false, 'canSplit' => false])
+            @include('ip-addresses.partials.row-actions', ['record' => $row])
         </span>
     </div>
 @empty

@@ -42,3 +42,15 @@ Schedule::command('identity:sync')
  * Güncelleme'deki düğme aynı kontrolü hemen yapar.
  */
 Schedule::command('update:check')->dailyAt('06:50');
+
+/*
+ * GATEWAY PING — ON DAKİKADA BİR.
+ *
+ * Bölünmüş blokta parçaların gateway'i, bölünmemiş /24'te .1 (bkz.
+ * GatewayPing). Yanıt veren "kullanılıyor" sayılır; listede yeşil/kırmızı
+ * nokta. Tur uzun sürerse yenisi üst üste binmez.
+ */
+Schedule::command('gateways:ping')
+    ->everyTenMinutes()
+    ->withoutOverlapping(15)
+    ->runInBackground();

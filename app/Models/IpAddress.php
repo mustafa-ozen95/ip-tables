@@ -15,6 +15,7 @@ use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Carbon;
 
 /**
  * Bir IP adresi ya da blok.
@@ -27,6 +28,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property int $prefix
  * @property string|null $name
  * @property string|null $description
+ * @property bool|null $gateway_up
+ * @property Carbon|null $gateway_checked_at
+ * @property Carbon|null $gateway_seen_at
  */
 class IpAddress extends Model
 {
@@ -49,6 +53,9 @@ class IpAddress extends Model
     {
         return [
             'prefix' => 'integer',
+            'gateway_up' => 'boolean',
+            'gateway_checked_at' => 'datetime',
+            'gateway_seen_at' => 'datetime',
         ];
     }
 
