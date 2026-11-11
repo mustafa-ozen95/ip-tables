@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Enums\Highlight;
 use App\Enums\PermissionEffect;
 use App\Models\AddressGroup;
 use App\Models\ApiToken;
@@ -153,6 +154,39 @@ class SubGroupTest extends TestCase
         $this->assertDatabaseMissing('sub_groups', ['id' => $alt->getKey()]);
         $this->assertNull($kayit->fresh()->sub_group_id, 'Alt grup kalkınca kayıt grupta, başlıksız kalmalı.');
         $this->assertSame($grup->getKey(), $kayit->fresh()->address_group_id);
+    }
+
+    /** Başlık rengi (ör. yurtdışı firewall kırmızı): listede ve gruplar sayfasında görünür. */
+    #[Test]
+    public function alt_grup_basligi_renklendirilir(): void
+    {
+        [$grup, $bir] = $this->yedekleme();
+        $yonetici = $this->yonetici();
+
+        $this->actingAs($yonetici)
+            ->put(route('groups.sub.update', [$grup, $bir]), ['alt_ad' => 'Yedek 1', 'alt_renk' => 'mor-pembe'])
+            ->assertSessionHasErrors('alt_renk');
+
+        $this->actingAs($yonetici)
+            ->put(route('groups.sub.update', [$grup, $bir]), ['alt_ad' => 'Yedek 1', 'alt_renk' => 'red'])
+            ->assertSessionHasNoErrors();
+        $this->assertSame(Highlight::Red, $bir->fresh()->highlight);
+
+        $this->actingAs($yonetici)
+            ->get(route('ip-addresses.index', ['grup' => $grup->uuid]))
+            ->assertSee('<span class="credential-section__name highlight highlight--red">Yedek 1</span>', false)
+            ->assertSee('<span class="credential-section__name">Yedek 2</span>', false);
+
+        $this->actingAs($yonetici)
+            ->get(route('groups.index', ['acik' => $grup->uuid, 'pencere' => 'duzenle', 'alt' => $bir->uuid]))
+            ->assertSee('<span class="highlight highlight--red">Yedek 1</span>', false)
+            ->assertSeeInOrder(['name="alt_renk"', '<option value="red"', 'selected>Kırmızı</option>'], false);
+
+        /* Boş seçim rengi kaldırır. */
+        $this->actingAs($yonetici)
+            ->put(route('groups.sub.update', [$grup, $bir]), ['alt_ad' => 'Yedek 1', 'alt_renk' => ''])
+            ->assertSessionHasNoErrors();
+        $this->assertNull($bir->fresh()->highlight);
     }
 
     /**

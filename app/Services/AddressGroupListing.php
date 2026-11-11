@@ -53,7 +53,7 @@ class AddressGroupListing
      * hatasında da öyle.
      *
      * @param  Collection<int, AddressGroup>  $groups
-     * @return array{baslik: string, action: string, method: string, ad: ?string, grupAdi: string}|null
+     * @return array{baslik: string, action: string, method: string, ad: ?string, renk: ?string, grupAdi: string}|null
      */
     private function subGroupWindow(Request $request, Collection $groups): ?array
     {
@@ -67,6 +67,7 @@ class AddressGroupListing
                 'action' => route('groups.sub.store', $group),
                 'method' => 'POST',
                 'ad' => null,
+                'renk' => null,
                 'grupAdi' => $group->name,
             ];
         }
@@ -79,6 +80,7 @@ class AddressGroupListing
                 'action' => route('groups.sub.update', [$subGroup->group, $subGroup]),
                 'method' => 'PUT',
                 'ad' => $subGroup->name,
+                'renk' => $subGroup->highlight?->value,
                 'grupAdi' => $subGroup->group->name,
             ];
         }

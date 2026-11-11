@@ -21,6 +21,11 @@
                               hint="{{ $pencere['grupAdi'] }} grubunun içinde listede başlık olarak görünür. Yetki taşımaz.">
                     <x-form.input name="alt_ad" :value="$pencere['ad']" required maxlength="120" autofocus />
                 </x-form.field>
+
+                <x-form.field name="alt_renk" label="Başlık rengi" hint="Listede alt grup başlığı bu renkte yazılır.">
+                    {{-- Seçenekler ve seçili kutu rengi şerit olarak gösterir (panel-custom.css: VURGU SEÇİMİ). --}}
+                    <x-form.select name="alt_renk" class="highlight-select" :options="App\Enums\Highlight::options()" :selected="$pencere['renk']" />
+                </x-form.field>
             </div>
 
             <x-ui.modal-actions :submit="$pencere['method'] === 'POST' ? 'Ekle' : 'Kaydet'" />

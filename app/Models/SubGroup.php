@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Enums\Highlight;
 use App\Models\Concerns\HasUuid;
 use Database\Factories\SubGroupFactory;
 use Illuminate\Database\Eloquent\Builder;
@@ -21,6 +22,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  *
  * Derinlik birdir: alt grubun altı yoktur. İkinci kat, "hangi seviye yetki
  * taşıyor" sorusunu geri getirirdi.
+ *
+ * Başlık renklendirilebilir (ör. yurtdışı firewall bölmesi kırmızı):
+ * adreslerdeki vurgu renkleriyle aynı (bkz. Highlight).
  */
 class SubGroup extends Model
 {
@@ -35,12 +39,14 @@ class SubGroup extends Model
         'address_group_id',
         'name',
         'position',
+        'highlight',
     ];
 
     protected function casts(): array
     {
         return [
             'position' => 'integer',
+            'highlight' => Highlight::class,
         ];
     }
 

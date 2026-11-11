@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Enums\Highlight;
 use App\Models\AddressGroup;
 use App\Models\IpAddress;
 use App\Models\SubGroup;
@@ -99,7 +100,7 @@ class IpAddressListing
      * Alt grup bölümü katlanır, kapalı gelir; seçili kayıt ya da açılacak
      * blok içindeyse açık gelir.
      *
-     * @return array<int, array{title: string|null, summary: string|null, free: array{label: string, full: bool}|null, open: bool, blocks: list<array<string, mixed>>, rows: Collection<int, IpAddress>}>
+     * @return array<int, array{title: string|null, highlight?: string|null, summary: string|null, free: array{label: string, full: bool}|null, open: bool, blocks: list<array<string, mixed>>, rows: Collection<int, IpAddress>}>
      */
     private function sections(User $user, ?AddressGroup $group, string $query, ?string $openBlock, ?string $selected, ?string $sort): array
     {
@@ -124,12 +125,13 @@ class IpAddressListing
 
         $blocksBy = collect($plan['blocks'])->groupBy(fn (array $b): string => (string) $b['record']->sub_group_id);
         $rowsBy = $rows->groupBy(fn (IpAddress $r): string => (string) $r->sub_group_id);
-        $section = function (string $title, string $key) use ($blocksBy, $rowsBy, $selected): array {
+        $section = function (string $title, string $key, ?Highlight $highlight = null) use ($blocksBy, $rowsBy, $selected): array {
             $blocks = $blocksBy->get($key, collect());
             $rows = $rowsBy->get($key, new Collection);
 
             return [
                 'title' => $title,
+                'highlight' => $highlight?->value,
                 'summary' => implode(' · ', array_filter([
                     $blocks->isNotEmpty() ? $blocks->count().' blok' : null,
                     $rows->isNotEmpty() ? $rows->count().' adres' : null,
@@ -142,7 +144,7 @@ class IpAddressListing
             ];
         };
 
-        $sections = $group->subGroups->map(fn (SubGroup $sub): array => $section($sub->name, (string) $sub->id))->all();
+        $sections = $group->subGroups->map(fn (SubGroup $sub): array => $section($sub->name, (string) $sub->id, $sub->highlight))->all();
         $sections[] = $section('Alt grupsuz', '');
 
         return array_values(array_filter($sections, fn (array $s): bool => $s['blocks'] !== [] || $s['rows']->isNotEmpty()))

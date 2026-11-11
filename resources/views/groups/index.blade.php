@@ -65,7 +65,7 @@
                                 @forelse ($group->subGroups as $subGroup)
                                     <tr draggable="true" data-order-id="{{ $subGroup->uuid }}">
                                         <td data-label="Alt grup">
-                                            <span class="handle" aria-hidden="true">⣿</span>{{ $subGroup->name }}
+                                            <span class="handle" aria-hidden="true">⣿</span><span @class(['highlight highlight--'.$subGroup->highlight?->value => $subGroup->highlight])>{{ $subGroup->name }}</span>
                                         </td>
                                         <td data-label="Adres" class="mono text-right">{{ $subGroup->ip_addresses_count }}</td>
                                         <td>

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\SubGroup;
 
+use App\Enums\Highlight;
 use App\Models\SubGroup;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -44,6 +45,7 @@ class SubGroupRequest extends FormRequest
                     ->where('address_group_id', $group->getKey())
                     ->ignore($subGroup),
             ],
+            'alt_renk' => ['nullable', Rule::enum(Highlight::class)],
         ];
     }
 
@@ -52,6 +54,7 @@ class SubGroupRequest extends FormRequest
     {
         return [
             'alt_ad' => 'alt grup adı',
+            'alt_renk' => 'başlık rengi',
         ];
     }
 
@@ -60,6 +63,7 @@ class SubGroupRequest extends FormRequest
     {
         return [
             'name' => $this->string('alt_ad')->squish()->value(),
+            'highlight' => $this->validated('alt_renk') ?: null,
         ];
     }
 }
