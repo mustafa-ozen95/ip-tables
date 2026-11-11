@@ -6,7 +6,8 @@
     Böl onu böler.
 
     Ad dışındaki sütunlar içeriği kadardır (table__cell--tight); kalan yer
-    Ad'ındır.
+    Ad'ındır. Ping noktası gateway'in yanında AYRI hücrededir: adres boyu
+    değişse de noktalar alt alta hizalanır.
 --}}
 @if ($block['parts'] !== [])
     <details class="block-node" @if ($block['open']) open @endif>
@@ -21,7 +22,7 @@
                     <thead>
                         <tr>
                             <th>Ağ</th>
-                            <th>Ağ geçidi</th>
+                            <th colspan="2">Ağ geçidi</th>
                             <th>İlk adres</th>
                             <th>Son adres</th>
                             <th>Maske</th>
@@ -34,8 +35,8 @@
                         @foreach ($block['parts'] as $part)
                             <tr>
                                 <td class="table__cell--mono table__cell--tight" data-label="Ağ">{{ $part['notation'] }}</td>
-                                <td class="table__cell--mono table__cell--tight" data-label="Ağ geçidi">
-                                    {{ $part['gateway'] ?? '—' }}
+                                <td class="table__cell--mono table__cell--tight" data-label="Ağ geçidi">{{ $part['gateway'] ?? '—' }}</td>
+                                <td class="table__cell--tight ping-cell" data-label="Ping">
                                     @if ($part['pingable'])
                                         @include('ip-addresses.partials.ping-dot', ['ping' => $part['ping'], 'record' => $part['record']])
                                     @endif

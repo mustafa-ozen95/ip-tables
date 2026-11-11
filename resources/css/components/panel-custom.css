@@ -135,6 +135,22 @@
     margin-left: var(--space-2);
 }
 
+/*
+ * Hizalama: parça tablosunda nokta gateway'in yanındaki ayrı hücrededir
+ * (ping-cell); arada tek hücre boşluğu kalsın diye sol dolgusu yoktur. Blok
+ * satırında nokta adres sütununun sağ kenarına yaslanır. İkisinde de adres
+ * boyu değişse de noktalar alt alta durur.
+ */
+@media (min-width: 721px) {
+    .table td.ping-cell { padding-left: 0; }
+
+    .ping-cell .ping-dot { margin-left: 0; }
+}
+
+.block-node__address > .ping {
+    margin-left: auto;
+}
+
 .ping-dot .dot {
     animation: ping-dot 1.6s ease-in-out infinite;
 }
