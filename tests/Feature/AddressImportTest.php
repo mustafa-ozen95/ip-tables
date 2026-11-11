@@ -143,4 +143,25 @@ class AddressImportTest extends TestCase
 
         $this->assertDatabaseCount('ip_addresses', 0);
     }
+
+    /** Parçalar birbirine ya da kayıtlı parçaya binemez; tek çakışma varsa hiçbir şey yazılmaz. */
+    #[Test]
+    public function cakisan_parca_yazilmaz(): void
+    {
+        IpAddress::factory()->for($this->ipv4(), 'group')->address('192.0.2.0/24')->create(['name' => 'blok']);
+        IpAddress::factory()->for($this->ipv4(), 'group')->address('192.0.2.64/26')->create(['name' => 'kayitli']);
+        $this->liste([
+            ['IPv4', '', '198.51.100.0/28', 'bir', '', ''],
+            ['IPv4', '', '198.51.100.8/29', 'iki', '', ''],
+            ['IPv4', '', '192.0.2.72/29', 'uc', '', ''],
+            ['IPv4', '', '192.0.2.128/25', 'dort', '', ''],
+        ]);
+
+        $this->yukle(['--yaz' => true])
+            ->expectsOutputToContain('Satır 3: 198.51.100.8/29, listedeki 198.51.100.0/28 ile çakışıyor.')
+            ->expectsOutputToContain('Satır 4: 192.0.2.72/29, kayıtlı 192.0.2.64/26 ile çakışıyor.')
+            ->assertFailed();
+
+        $this->assertDatabaseCount('ip_addresses', 2);
+    }
 }

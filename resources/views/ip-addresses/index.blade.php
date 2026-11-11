@@ -44,6 +44,19 @@
 
                 <span class="spacer"></span>
 
+                @can('exportAny', App\Models\IpAddress::class)
+                    <form method="POST" action="{{ route('ip-addresses.export') }}">
+                        @csrf
+                        @if ($selectedGroup)
+                            <input type="hidden" name="grup" value="{{ $selectedGroup->uuid }}">
+                        @endif
+                        @if ($query !== '')
+                            <input type="hidden" name="q" value="{{ $query }}">
+                        @endif
+                        <button type="submit" class="btn btn--sm">Excel</button>
+                    </form>
+                @endcan
+
                 @if ($canCreate)
                     <a href="{{ route('ip-addresses.index', ['grup' => $selectedGroup?->uuid, 'pencere' => 'ekle']) }}"
                        class="btn btn--primary btn--sm" data-modal-open="record-add">Yeni adres</a>

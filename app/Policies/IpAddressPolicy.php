@@ -55,6 +55,15 @@ class IpAddressPolicy
         return $this->can($user, 'ping', $ipAddress);
     }
 
+    /*
+     * Excel çıktısı: veri panelden çıkar, "görüntüle" kapsamaz. Hangi
+     * grupların dosyaya gireceğini IpAddress::allowedTo('export') daraltır.
+     */
+    public function exportAny(User $user): bool
+    {
+        return $this->resolver->allowsAny($user, self::RESOURCE, 'export');
+    }
+
     private function can(User $user, string $action, IpAddress $ipAddress): bool
     {
         return $this->resolver->allows($user, self::RESOURCE, $action, $ipAddress->address_group_id);

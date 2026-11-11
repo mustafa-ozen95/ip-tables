@@ -23,6 +23,8 @@ return [
         'delete' => 'Sil',
         // Gateway'e elle ping (↻): dışarıya paket çıkar, ayrı yetkidir.
         'ping' => 'Ping at',
+        // Listeyi Excel dosyası olarak indirmek: veri panelden çıkar, ayrı yetkidir.
+        'export' => 'Excel çıktısı al',
     ],
 
     /*
@@ -43,7 +45,7 @@ return [
     'templates' => [
         'network' => [
             'address_group' => [
-                'all' => ['view', 'create', 'update', 'delete', 'ping'],
+                'all' => ['view', 'create', 'update', 'delete', 'ping', 'export'],
             ],
         ],
         'teknik' => [
@@ -57,7 +59,7 @@ return [
         'address_group' => [
             'label' => 'Adres grupları',
             'model' => AddressGroup::class,
-            'actions' => ['view', 'create', 'update', 'delete', 'ping'],
+            'actions' => ['view', 'create', 'update', 'delete', 'ping', 'export'],
         ],
     ],
 

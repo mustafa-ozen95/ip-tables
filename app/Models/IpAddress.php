@@ -100,11 +100,21 @@ class IpAddress extends Model
      */
     public function scopeVisibleTo(Builder $query, User $user): void
     {
+        $query->allowedTo($user, 'view');
+    }
+
+    /**
+     * Kullanıcının bu yetkisinin olduğu gruplardaki kayıtlar (ör. export).
+     *
+     * @param  Builder<self>  $query
+     */
+    public function scopeAllowedTo(Builder $query, User $user, string $action): void
+    {
         $query->whereIn('address_group_id', app(UserPermissionResolver::class)->scope(
             AddressGroup::query()->select('id'),
             $user,
             IpAddressPolicy::RESOURCE,
-            'view',
+            $action,
         ));
     }
 

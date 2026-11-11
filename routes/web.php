@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Http\Controllers\Account\ProfileController;
 use App\Http\Controllers\ActivityLogController;
+use App\Http\Controllers\AddressExportController;
 use App\Http\Controllers\AddressGroupController;
 use App\Http\Controllers\AddressSplitController;
 use App\Http\Controllers\ApiTokenController;
@@ -91,6 +92,10 @@ Route::middleware('auth')->group(function (): void {
     /* ↻'nin dönen ikonu sonucu buradan bekler (aralıkla sorar). */
     Route::get('addresses/{ipAddress}/ping', [GatewayPingController::class, 'show'])
         ->middleware('throttle:120,1')->name('ip-addresses.ping.show');
+
+    /* Excel çıktısı; kaynağın {ipAddress} rotalarından önce, "export" bir uuid sanılmasın. */
+    Route::post('addresses/export', AddressExportController::class)
+        ->middleware('throttle:10,1')->name('ip-addresses.export');
 
     Route::resource('addresses', IpAddressController::class)
         ->only(['index', 'store', 'update', 'destroy'])

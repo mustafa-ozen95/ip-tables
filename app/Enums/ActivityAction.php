@@ -25,6 +25,9 @@ enum ActivityAction: string
     /* Panel güncellemesi başlatıldı (platformun deploy hook'u tetiklendi). */
     case UpdateStarted = 'update_started';
 
+    /* Liste Excel dosyası olarak indirildi: hiçbir şey değişmez ama veri panelden çıkar. */
+    case Exported = 'exported';
+
     public function label(): string
     {
         return match ($this) {
@@ -35,6 +38,7 @@ enum ActivityAction: string
             self::LoginFailed => 'Başarısız giriş',
             self::Pruned => 'Kayıt budandı',
             self::UpdateStarted => 'Güncelleme başlatıldı',
+            self::Exported => 'Dışa aktarıldı',
         };
     }
 
@@ -45,7 +49,7 @@ enum ActivityAction: string
             self::Updated => BadgeVariant::Blue,
             self::Deleted, self::LoginFailed, self::Pruned => BadgeVariant::Red,
             self::UpdateStarted => BadgeVariant::Blue,
-            self::LoggedIn => BadgeVariant::Gray,
+            self::LoggedIn, self::Exported => BadgeVariant::Gray,
         };
     }
 

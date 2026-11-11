@@ -19,6 +19,9 @@ use Illuminate\Support\Facades\DB;
  * geçer (IpAddressWriter): her biri işlem geçmişine düşer. IPv4'te /24 blok eklenir; daha küçüğü (ör. /25) kendi
  * /24'ünün parçası olarak açılır, blok listede yoksa adsız açılır.
  *
+ * Parçalar birbirine ya da kayıtlı parçaya binemez; bu da yazmadan önce
+ * denetlenir.
+ *
  * Önce bütün satırlar denetlenir; tek hata varsa hiçbir şey yazılmaz. Yazma
  * tek işlemdir: yarıda kalırsa silinenler de geri gelir.
  */
@@ -39,6 +42,8 @@ class AddressImport
         $rows = [];
         $errors = [];
         $seen = [];
+        /** @var array<string, list<array{start: int, end: int, notation: string}>> $taken grup|/24 => listedeki parçalar */
+        $taken = [];
 
         foreach (preg_split('/\R/u', $contents) as $i => $line) {
             $cells = array_map(fn (string $c): string => trim($c), explode("\t", $line));
@@ -58,6 +63,7 @@ class AddressImport
                 $this->isIpv4($parsed) && $parsed->prefix < Ipv4BlockRules::BLOCK_PREFIX => "{$parsed->notation()}: IPv4'te en büyük blok /24.",
                 isset($seen[$group.'|'.$parsed->notation()]) => "{$parsed->notation()} listede iki kez var.",
                 ! $replace && $this->exists($group, $parsed) => "{$parsed->notation()} {$group} grubunda zaten kayıtlı.",
+                $this->isPart($parsed) && ($clash = $this->clash($group, $parsed, $taken, ! $replace)) !== null => "{$parsed->notation()}, {$clash} ile çakışıyor.",
                 mb_strlen($name) > 120 => 'ad 120 karakteri geçiyor.',
                 mb_strlen($description) > 1000 => 'açıklama 1000 karakteri geçiyor.',
                 $highlight !== '' && $this->highlight($highlight) === null => "vurgu \"{$highlight}\" bilinmiyor.",
@@ -71,6 +77,10 @@ class AddressImport
             }
 
             $seen[$group.'|'.$parsed->notation()] = true;
+
+            if ($this->isPart($parsed)) {
+                $taken[$group.'|'.$this->blockOf($parsed)][] = [...$this->span($parsed), 'notation' => $parsed->notation()];
+            }
             $rows[] = [
                 'line' => $i + 1,
                 'group' => $group,
@@ -105,18 +115,71 @@ class AddressImport
             usort($rows, fn (array $a, array $b): int => $this->isPart($a['parsed']) <=> $this->isPart($b['parsed']));
 
             foreach ($rows as $row) {
-                $this->isPart($row['parsed']) ? $this->createPart($row) : $this->writer->create($this->payload($row, $row['parsed']));
+                $this->isPart($row['parsed'])
+                    ? $this->createPart($row)
+                    : $this->writer->create($this->payload($row, $row['parsed']));
             }
 
             return ['deleted' => $deleted, 'created' => count($rows)];
         });
     }
 
+    /**
+     * Parçanın bindiği parça: önce listede, sonra ($stored) kayıtlılarda.
+     * Aynı ağ çakışma değildir (güncellenir ya da "zaten kayıtlı" der).
+     *
+     * @param  array<string, list<array{start: int, end: int, notation: string}>>  $taken
+     */
+    private function clash(string $group, ParsedAddress $parsed, array $taken, bool $stored): ?string
+    {
+        ['start' => $start, 'end' => $end] = $this->span($parsed);
+        $overlaps = fn (array $o): bool => $o['start'] <= $end && $start <= $o['end'] && $o['notation'] !== $parsed->notation();
+
+        foreach ($taken[$group.'|'.$this->blockOf($parsed)] ?? [] as $other) {
+            if ($overlaps($other)) {
+                return "listedeki {$other['notation']}";
+            }
+        }
+
+        if (! $stored) {
+            return null;
+        }
+
+        $block = $this->blockOf($parsed);
+        $records = IpAddress::query()->whereHas('group', fn ($q) => $q->where('name', $group))
+            ->where('prefix', '>', Ipv4BlockRules::BLOCK_PREFIX)
+            ->where('address', 'like', substr($block, 0, (int) strrpos($block, '.') + 1).'%')->get();
+
+        foreach ($records as $record) {
+            $parsedRecord = $this->parser->parse($record->notation);
+
+            if ($parsedRecord !== null && $this->blockOf($parsedRecord) === $block
+                && $overlaps([...$this->span($parsedRecord), 'notation' => $parsedRecord->notation()])) {
+                return "kayıtlı {$parsedRecord->notation()}";
+            }
+        }
+
+        return null;
+    }
+
+    /** @return array{start: int, end: int} */
+    private function span(ParsedAddress $parsed): array
+    {
+        $start = (int) ip2long($parsed->address);
+
+        return ['start' => $start, 'end' => $start + $this->layout->size($parsed->prefix) - 1];
+    }
+
+    private function blockOf(ParsedAddress $parsed): string
+    {
+        return long2ip(ip2long($parsed->address) & ~0xFF);
+    }
+
     /** @param  array<string, mixed>  $row */
     private function createPart(array $row): void
     {
         $parsed = $row['parsed'];
-        $network = long2ip(ip2long($parsed->address) & ~0xFF);
+        $network = $this->blockOf($parsed);
         $block = $this->find($row['group'], $network, Ipv4BlockRules::BLOCK_PREFIX)
             ?? $this->writer->create($this->payload([...$row, 'name' => null, 'description' => null, 'highlight' => null],
                 $this->parser->parse("{$network}/".Ipv4BlockRules::BLOCK_PREFIX)));
