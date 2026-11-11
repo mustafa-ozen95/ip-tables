@@ -131,6 +131,21 @@ export function init() {
 
     on('click', '.inline-edit button[type="button"]', cancel);
 
+    /*
+     * Kutunun dışına tıklamak VAZGEÇMEKTİR, kaydetmek değil: kayıt yalnız ✓
+     * ya da Enter ile ve onaydan geçerek olur. Onay penceresinin içi dışarı
+     * sayılmaz; kaydet'e basınca o pencere açılıyor.
+     */
+    document.addEventListener('pointerdown', (event) => {
+        if (editing === null
+            || editing.field.contains(event.target)
+            || event.target.closest('[data-confirm-dialog]')) {
+            return;
+        }
+
+        cancel();
+    });
+
     on('keydown', '.inline-edit input', (event) => {
         if (event.key === 'Escape') {
             event.preventDefault();
