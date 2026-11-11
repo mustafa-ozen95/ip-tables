@@ -22,8 +22,8 @@ use Illuminate\Support\Facades\Process;
  * Pingler KUYRUKTAN gider: tur hedefleri `concurrency`'lik paketlere böler,
  * her paket bir iştir ve paketteki gateway'ler AYNI ANDA pinglenir (ayrı
  * süreçler); paketler sırayla işlenir (bkz. GatewayPingRoundJob). Gateway
- * başına `count` ping saniyede bir gider; biri yanıt alırsa gateway yanıt
- * veriyor sayılır. ↻ ayrı, önce işlenen kuyruktadır (PingGatewayJob::NOW):
+ * başına `count` ping `spacing_ms` arayla gider; biri yanıt alırsa gateway
+ * yanıt veriyor sayılır. ↻ ayrı, önce işlenen kuyruktadır (PingGatewayJob::NOW):
  * en çok bir paket bekler.
  *
  * Komut kabuktan geçmez (dizi); adres ip2long/long2ip'ten gelir. Sonuç kayda
@@ -124,7 +124,7 @@ class GatewayPing
     {
         $results = Process::pool(function (Pool $pool) use ($targets): void {
             foreach ($targets as $target) {
-                $pool->timeout($this->count() + $this->timeout() + 5)->command($this->command($target['gateway']));
+                $pool->timeout($this->deadline() + 5)->command($this->command($target['gateway']));
             }
         })->start()->wait();
 
@@ -146,8 +146,20 @@ class GatewayPing
     private function command(string $gateway): array
     {
         /* -w: ping kendi süresini aşmaz; süreç zaman aşımına kalmadan biter. */
-        return [(string) config('ip.gateway_ping.binary'), '-n', '-c', (string) $this->count(), '-i', '1',
-            '-W', (string) $this->timeout(), '-w', (string) ($this->count() + $this->timeout()), $gateway];
+        return [(string) config('ip.gateway_ping.binary'), '-n', '-c', (string) $this->count(), '-i', (string) ($this->spacingMs() / 1000),
+            '-W', (string) $this->timeout(), '-w', (string) $this->deadline(), $gateway];
+    }
+
+    /** Pingin en uzun süresi (sn): son ping gidene kadar geçen süre ve yanıt beklemesi. */
+    private function deadline(): int
+    {
+        return (int) ceil(($this->count() - 1) * $this->spacingMs() / 1000) + $this->timeout() + 1;
+    }
+
+    /** İki ping arası; ping'in root olmadan kabul ettiği alt sınır 200 ms. */
+    private function spacingMs(): int
+    {
+        return min(5000, max(200, (int) config('ip.gateway_ping.spacing_ms')));
     }
 
     /** Aynı anda pinglenen gateway sayısı (paket boyu). */

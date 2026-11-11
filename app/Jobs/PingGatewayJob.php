@@ -26,7 +26,8 @@ class PingGatewayJob implements ShouldQueue
 
     public int $tries = 1;
 
-    public int $timeout = 60;
+    /** En yavaş ayarda (10 ping, 5 sn ara) ping 47 sn sürer. */
+    public int $timeout = 90;
 
     /** @param  list<array{id: int, gateway: string}>  $targets */
     public function __construct(public array $targets) {}

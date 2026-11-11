@@ -35,6 +35,8 @@ return [
         /* Tur aralığı (dakika) ve gateway başına ping adedi; panelden de ayarlanır (config/settings.php). */
         'interval_minutes' => (int) env('GATEWAY_PING_INTERVAL_MINUTES', 10),
         'count' => (int) env('GATEWAY_PING_COUNT', 5),
+        /* İki ping arası (ms); ping -i. Root olmayan kullanıcıya 200 ms'den sıkı izin yok. */
+        'spacing_ms' => (int) env('GATEWAY_PING_SPACING_MS', 1000),
         /* Aynı anda pinglenen gateway sayısı: tur bu boyda paketlere bölünür. */
         'concurrency' => (int) env('GATEWAY_PING_CONCURRENCY', 20),
     ],

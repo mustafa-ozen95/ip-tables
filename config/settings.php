@@ -87,15 +87,23 @@ return [
 
                 'ip.gateway_ping.count' => [
                     'label' => 'Ping adedi',
-                    'hint' => 'Kontrolde gateway başına saniyede bir gönderilir; biri yanıt alırsa gateway yanıt veriyor sayılır.',
+                    'hint' => 'Kontrolde gateway başına ping hızı arayla gönderilir; biri yanıt alırsa gateway yanıt veriyor sayılır.',
                     'type' => 'int',
                     'unit' => 'ping',
                     'rules' => ['integer', 'min:1', 'max:10'],
                 ],
 
+                'ip.gateway_ping.spacing_ms' => [
+                    'label' => 'Ping hızı',
+                    'hint' => 'İki ping arasındaki süre: 1000 saniyede bir demektir. En az 200, en çok 5000.',
+                    'type' => 'int',
+                    'unit' => 'ms',
+                    'rules' => ['integer', 'min:200', 'max:5000'],
+                ],
+
                 'ip.gateway_ping.concurrency' => [
                     'label' => 'Aynı anda pinglenen gateway',
-                    'hint' => 'Tur gateway\'leri bu boyda paketlere böler; bir paket ping adedi kadar saniye sürer.',
+                    'hint' => 'Tur gateway\'leri bu boyda paketlere böler; bir paket ping adedi × ping hızı kadar sürer.',
                     'type' => 'int',
                     'unit' => 'gateway',
                     'rules' => ['integer', 'min:1', 'max:50'],

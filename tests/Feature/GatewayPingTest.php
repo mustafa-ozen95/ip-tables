@@ -138,7 +138,7 @@ class GatewayPingTest extends TestCase
         Process::assertNothingRan();
     }
 
-    /** Komut kabuktan geçmez: dizi, adres son öğe. Varsayılan 5 ping, saniyede bir; adet ayardan. */
+    /** Komut kabuktan geçmez: dizi, adres son öğe. Varsayılan 5 ping, saniyede bir; adet ve hız ayardan. */
     #[Test]
     public function komut_dizi_olarak_calisir(): void
     {
@@ -146,11 +146,11 @@ class GatewayPingTest extends TestCase
         Process::fake();
 
         app(GatewayPing::class)->check(1, '198.51.100.1');
-        config(['ip.gateway_ping.count' => 3]);
+        config(['ip.gateway_ping.count' => 3, 'ip.gateway_ping.spacing_ms' => 500]);
         app(GatewayPing::class)->check(1, '198.51.100.1');
 
         Process::assertRan(fn (PendingProcess $islem): bool => $islem->command === ['ping', '-n', '-c', '5', '-i', '1', '-W', '1', '-w', '6', '198.51.100.1']);
-        Process::assertRan(fn (PendingProcess $islem): bool => $islem->command === ['ping', '-n', '-c', '3', '-i', '1', '-W', '1', '-w', '4', '198.51.100.1']);
+        Process::assertRan(fn (PendingProcess $islem): bool => $islem->command === ['ping', '-n', '-c', '3', '-i', '0.5', '-W', '1', '-w', '3', '198.51.100.1']);
     }
 
     /** Tur aralığı ve ping adedi Ayarlar'dan değişir; sınır dışı değer kabul edilmez. */
@@ -162,21 +162,23 @@ class GatewayPingTest extends TestCase
         $yonetici = User::factory()->create(['role_id' => $rol->getKey()]);
 
         $this->actingAs($yonetici)->get(route('settings.index', ['grup' => 'ping']))
-            ->assertOk()->assertSee('Gateway ping')->assertSee('Tur aralığı')->assertSee('Ping adedi')->assertSee('Aynı anda pinglenen gateway');
+            ->assertOk()->assertSee('Gateway ping')->assertSee('Tur aralığı')->assertSee('Ping adedi')->assertSee('Ping hızı')->assertSee('Aynı anda pinglenen gateway');
 
         $this->actingAs($yonetici)->put(route('settings.update'), [
             'group' => 'ping', 'ip__gateway_ping__interval_minutes' => 30, 'ip__gateway_ping__count' => 3,
-            'ip__gateway_ping__concurrency' => 10,
+            'ip__gateway_ping__spacing_ms' => 500, 'ip__gateway_ping__concurrency' => 10,
         ])->assertSessionHasNoErrors();
 
         app(SettingsRepository::class)->apply();
-        $this->assertSame([1800, 3, 10], [GatewayPing::intervalSeconds(), config('ip.gateway_ping.count'), config('ip.gateway_ping.concurrency')]);
+        $this->assertSame([1800, 3, 500, 10], [GatewayPing::intervalSeconds(), config('ip.gateway_ping.count'),
+            config('ip.gateway_ping.spacing_ms'), config('ip.gateway_ping.concurrency')]);
 
         $this->actingAs($yonetici)->put(route('settings.update'), [
             'group' => 'ping', 'ip__gateway_ping__interval_minutes' => 30, 'ip__gateway_ping__count' => 50,
-            'ip__gateway_ping__concurrency' => 10,
+            'ip__gateway_ping__spacing_ms' => 100, 'ip__gateway_ping__concurrency' => 10,
         ])
-            ->assertSessionHasErrors();
+            /* 200 ms'den sık ping root ister; sınır dışı adet ve hız kabul edilmez. */
+            ->assertSessionHasErrors(['ip__gateway_ping__count', 'ip__gateway_ping__spacing_ms']);
     }
 
     /** Tur hedefleri paketlere bölüp hemen kuyruğa atar, sonraki turu aralık sonrasına kurar; zamanlayıcıda değildir. */
