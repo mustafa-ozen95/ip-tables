@@ -4,6 +4,9 @@
     BLOK LİSTESİ). İşlemler satırın sonundaki ⋮ penceresindedir. Kısmen
     bölünmüş blokta bölünmemiş alan da tabloda satırdır; bloğun ⋮'ündeki
     Böl onu böler.
+
+    Ad dışındaki sütunlar içeriği kadardır (table__cell--tight); kalan yer
+    Ad'ındır.
 --}}
 @if ($block['parts'] !== [])
     <details class="block-node" @if ($block['open']) open @endif>
@@ -30,18 +33,18 @@
                     <tbody>
                         @foreach ($block['parts'] as $part)
                             <tr>
-                                <td class="table__cell--mono" data-label="Ağ">{{ $part['notation'] }}</td>
-                                <td class="table__cell--mono" data-label="Ağ geçidi">
+                                <td class="table__cell--mono table__cell--tight" data-label="Ağ">{{ $part['notation'] }}</td>
+                                <td class="table__cell--mono table__cell--tight" data-label="Ağ geçidi">
                                     {{ $part['gateway'] ?? '—' }}
                                     @if ($part['pingable'])
                                         @include('ip-addresses.partials.ping-dot', ['ping' => $part['ping'], 'record' => $part['record']])
                                     @endif
                                 </td>
-                                <td class="table__cell--mono" data-label="İlk adres">{{ $part['first'] }}</td>
-                                <td class="table__cell--mono" data-label="Son adres">{{ $part['last'] }}</td>
-                                <td class="table__cell--mono" data-label="Maske">{{ $part['mask'] ?? '—' }}</td>
+                                <td class="table__cell--mono table__cell--tight" data-label="İlk adres">{{ $part['first'] }}</td>
+                                <td class="table__cell--mono table__cell--tight" data-label="Son adres">{{ $part['last'] }}</td>
+                                <td class="table__cell--mono table__cell--tight" data-label="Maske">{{ $part['mask'] ?? '—' }}</td>
                                 <td data-label="Ad">{{ $part['free'] ? $part['name'] : ($part['record']->name ?? '—') }}</td>
-                                <td data-label="Durum"><x-ui.badge :variant="$part['badge']">{{ $part['stateLabel'] }}</x-ui.badge></td>
+                                <td class="table__cell--tight" data-label="Durum"><x-ui.badge :variant="$part['badge']">{{ $part['stateLabel'] }}</x-ui.badge></td>
                                 <td class="table__cell--tight table__cell--right">
                                     @unless ($part['free'])
                                         @include('ip-addresses.partials.row-actions', ['record' => $part['record']])
