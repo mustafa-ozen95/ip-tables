@@ -117,3 +117,20 @@
 @media (max-width: 720px) {
     .block-node__parts { padding: 0 var(--space-3) var(--space-3); }
 }
+
+/*
+ * LİSTE KUTUSU: uzun seçim listesi açılır pencere yerine sayfada kutu olarak
+ * durur (select[size], Böl penceresinde adet ve aralık). Linux'ta Chrome
+ * uzun listeyi imlecin altına açıyor; tıklama bırakılınca altta kalan
+ * seçenek seçilip liste kapanıyordu. Kutunun açılır penceresi yoktur.
+ */
+.select[size] {
+    height: auto;
+    padding: var(--space-1) 0;
+    background-image: none;
+    overflow-y: auto;
+}
+
+.select[size] option {
+    padding: var(--space-1) var(--space-3);
+}

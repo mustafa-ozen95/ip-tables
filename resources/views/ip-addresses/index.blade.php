@@ -202,14 +202,14 @@
                     </x-form.field>
 
                     <x-form.field name="ranges.0.count" id="split-0-count" label="Adet">
-                        <x-form.select name="ranges[0][count]" id="split-0-count"
+                        <x-form.select name="ranges[0][count]" id="split-0-count" size="6"
                                        :options="$selected['split']['counts']" :selected="$selected['split']['row']['count']"
                                        data-linked="ranges[0][prefix]"
                                        data-linked-options="{{ json_encode($selected['split']['countMap']) }}" />
                     </x-form.field>
 
                     <x-form.field name="ranges.0.slot" id="split-0-slot" label="Müsait aralık">
-                        <x-form.select name="ranges[0][slot]" id="split-0-slot"
+                        <x-form.select name="ranges[0][slot]" id="split-0-slot" size="6"
                                        :options="$selected['split']['slots']" :selected="$selected['split']['row']['slot']"
                                        data-linked="ranges[0][count]"
                                        data-linked-options="{{ json_encode($selected['split']['slotMap']) }}" />

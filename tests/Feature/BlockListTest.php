@@ -172,6 +172,8 @@ class BlockListTest extends TestCase
         /* .64–.255 boş: /26 en çok 3, /27 en çok 6 art arda. */
         $adet = $this->secici($html, 'split-0-count');
         $this->assertStringContainsString('data-linked="ranges[0][prefix]"', $adet);
+        /* Uzun liste kutuda durur: açılır pencere imlecin altına açılıp kendiliğinden seçiyordu. */
+        $this->assertStringContainsString('size="6"', $adet);
         $this->assertStringContainsString('value="26:3"', $adet);
         $this->assertStringContainsString('2 parça · 64 adres', $adet);
         $this->assertStringNotContainsString('value="26:4"', $adet);
@@ -179,6 +181,7 @@ class BlockListTest extends TestCase
 
         $aralik = $this->secici($html, 'split-0-slot');
         $this->assertStringContainsString('data-linked="ranges[0][count]"', $aralik);
+        $this->assertStringContainsString('size="6"', $aralik);
         $this->assertStringContainsString('value="64-191"', $aralik);
         $this->assertStringContainsString('198.51.100.64 – .191', $aralik);
         $this->assertStringNotContainsString('value="0-63"', $aralik);
