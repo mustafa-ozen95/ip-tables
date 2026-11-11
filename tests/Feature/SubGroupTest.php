@@ -103,8 +103,9 @@ class SubGroupTest extends TestCase
             ->get(route('ip-addresses.index', ['grup' => $grup->uuid]))
             ->assertOk()
             ->assertDontSee('row-item--alt', false)
-            /* Başlık tıklanmaz: bağlantı değil, düz başlık. */
-            ->assertSee('<div class="credential-section">', false)
+            /* Başlık bağlantı değil: katlanır bölümün başlığıdır, kapalı gelir. */
+            ->assertSee('<details class="sub-group" >', false)
+            ->assertSee('<summary class="credential-section sub-group__head">', false)
             ->assertDontSee('<a href="http://localhost/access?grup='.$grup->uuid.'&amp;alt=', false);
     }
 
@@ -324,5 +325,29 @@ class SubGroupTest extends TestCase
             ->assertOk()
             ->assertJsonFragment(['ad' => 'Kayit-Bir'])
             ->assertJsonPath('data.0.alt_grup.ad', fn (?string $ad): bool => in_array($ad, ['Yedek 1', 'Yedek 2', null], true));
+    }
+
+    /** Alt grup bölümü kapalı gelir; seçili kayıt içindeyse açık gelir, başlıkta sayısı yazar. */
+    #[Test]
+    public function alt_grup_kapali_gelir_secili_kayit_icindeyse_acilir(): void
+    {
+        [$grup, $bir] = $this->yedekleme();
+        $kayit = IpAddress::query()->where('sub_group_id', $bir->getKey())->firstOrFail();
+        $yonetici = $this->yonetici();
+
+        $this->actingAs($yonetici)
+            ->get(route('ip-addresses.index', ['grup' => $grup->uuid]))
+            ->assertDontSee('<details class="sub-group" open', false)
+            ->assertSee('<span class="sub-group__meta">1 adres</span>', false);
+
+        $html = $this->actingAs($yonetici)
+            ->get(route('ip-addresses.index', ['grup' => $grup->uuid, 'kayit' => $kayit->uuid]))
+            ->assertOk()->getContent();
+
+        /* Yalnız seçili kaydın bölümü (Yedek 1) açık; boşluklar sadeleştirilip bakılır. */
+        $html = preg_replace('/\s+/', ' ', $html);
+        $this->assertSame(1, substr_count($html, '<details class="sub-group" open'));
+        $this->assertTrue(strpos($html, '<details class="sub-group" open') < strpos($html, 'Yedek 1')
+            && strpos($html, 'Kayit-Bir') < strpos($html, '<details class="sub-group" >'));
     }
 }

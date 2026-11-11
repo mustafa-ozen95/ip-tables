@@ -13,7 +13,7 @@
                        class="row-item"
                        @if ($selectedGroup === null) aria-selected="true" @endif>
                         <span class="row-item__label">Hepsi</span>
-                        <span class="row-item__meta">{{ $allCount }}</span>
+                        <span class="row-item__meta">@if ($allFree){{ $allFree }} · @endif{{ $allCount }}</span>
                     </a>
                 @endif
 
@@ -22,7 +22,7 @@
                        class="row-item"
                        @if ($selectedGroup?->is($group)) aria-selected="true" @endif>
                         <span class="row-item__label">{{ $group->name }}</span>
-                        <span class="row-item__meta">{{ $group->ip_addresses_count }}</span>
+                        <span class="row-item__meta">@isset($groupFree[$group->uuid]){{ $groupFree[$group->uuid] }} · @endisset{{ $group->ip_addresses_count }}</span>
                     </a>
                 @empty
                     <x-ui.empty title="Grup yok" text="Size henüz bir grup yetkisi verilmemiş." />
@@ -54,7 +54,11 @@
                 <div class="grid-row__head address-row">
                     <span class="address-row__address">Adres</span>
                     <span class="address-row__name">Ad</span>
-                    <span class="address-row__type">Tür</span>
+                    <span class="address-row__type">
+                        Tür
+                        <a href="{{ $sort['url'] }}" @class(['sort-toggle', 'sort-toggle--active' => $sort['active']])
+                           title="{{ $sort['label'] }}" aria-label="{{ $sort['label'] }}">{{ $sort['icon'] }}</a>
+                    </span>
                     <span class="address-row__description">Açıklama</span>
                     <span class="address-row__actions"></span>
                 </div>

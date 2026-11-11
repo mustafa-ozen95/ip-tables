@@ -208,3 +208,60 @@
 .highlight--green { color: var(--color-green-fg); }
 .highlight--blue { color: var(--color-blue-fg); }
 .highlight--purple { color: var(--color-purple-fg); }
+
+/*
+ * ALT GRUP: bölüm başlığı katlanır (<details>, betiksiz), kapalı gelir.
+ * Ok ve dönüşü blok satırınınkidir (block-node__toggle); başlıkta blok
+ * sayısı ve boş pay sağa yaslanır. Sütun başlığının hemen altındaki ilk
+ * bölüme ikinci çizgi çekilmez (credential-section'daki kuralın eşi).
+ */
+.sub-group > summary {
+    list-style: none;
+    cursor: pointer;
+}
+
+.sub-group > summary::-webkit-details-marker {
+    display: none;
+}
+
+.sub-group[open] > summary .block-node__toggle::before {
+    transform: rotate(90deg);
+}
+
+.sub-group__meta {
+    margin-left: auto;
+    font-weight: var(--weight-normal);
+    color: var(--color-text-muted);
+    white-space: nowrap;
+}
+
+.address-row.grid-row__head + .sub-group > .credential-section {
+    border-top: 0;
+    margin-top: 0;
+}
+
+/*
+ * AÇIKLAMA kırpılmaz: listede satır uzar, parça tablosunda adın altına
+ * iner. Boşluksuz uzun yazı da sütundan taşmasın diye her yerde kırılır.
+ */
+.address-row__description,
+.part-note {
+    overflow-wrap: anywhere;
+}
+
+/*
+ * SIRALAMA (↕ ↑ ↓): Tür sütun başlığında boş/dolu sıralaması (bkz.
+ * IpAddressListing::sortLink). Kardeş panellerde sıralanır sütun başlığı
+ * yok; başlık yazısının yanında küçük bağlantıdır, seçiliyken vurgulanır.
+ */
+.sort-toggle {
+    margin-left: var(--space-1);
+    padding: 0 var(--space-1);
+    color: var(--color-text-muted);
+    text-decoration: none;
+}
+
+.sort-toggle:hover,
+.sort-toggle--active {
+    color: var(--color-blue-fg);
+}

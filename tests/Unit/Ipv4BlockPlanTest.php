@@ -44,8 +44,12 @@ class Ipv4BlockPlanTest extends TestCase
         $plan = $this->plan('198.51.100.0/24', '203.0.113.0/24');
 
         $this->assertSame(['198.51.100.0/24', '203.0.113.0/24'], array_column($plan['blocks'], 'notation'));
-        $this->assertSame(['Bölünmedi', 'Bölünmedi'], array_column($plan['blocks'], 'partsLabel'));
-        $this->assertSame('Boş', $plan['blocks'][0]['stateLabel']);
+        /* Bölünmemiş blokta parça yazısı yok; açıklama sütununda yalnız açıklama. */
+        $this->assertSame([null, null], array_column($plan['blocks'], 'partsLabel'));
+        /* Bölünmemiş blok tek kayıttır: adı varsa dolu, yoksa boş. */
+        $this->assertSame('Dolu', $plan['blocks'][0]['stateLabel']);
+        $adsiz = $this->kayitlar('198.51.100.0/24')->each(fn (IpAddress $k) => $k->name = null);
+        $this->assertSame('Boş', (new Ipv4BlockPlan)->build($adsiz)['blocks'][0]['stateLabel']);
     }
 
     /** /29: ilk kullanılabilir adres ağ geçidi, müşteriye .2'den son kullanılabilire kadar. */
@@ -75,6 +79,7 @@ class Ipv4BlockPlanTest extends TestCase
         $blok = (new Ipv4BlockPlan)->build($kayitlar)['blocks'][0];
 
         $this->assertSame('3 parça', $blok['partsLabel']);
+        $this->assertSame('3 parça', $blok['note']);
         $this->assertSame('%75 dolu', $blok['stateLabel']);
         $this->assertSame(['Dolu', 'Dolu', 'Boş'], array_column($blok['parts'], 'stateLabel'));
     }

@@ -114,18 +114,30 @@ class Ipv4BlockPlan
 
         $freeCount = array_sum(array_map(fn (array $f): int => $f['end'] - $f['start'] + 1, $free));
 
+        /* Bölünmemiş blokta parça yazısı yok; açıklama sütunu kaydın açıklamasıdır. */
+        $partsLabel = match (true) {
+            $parts === [] => null,
+            $freeCount > 0 => count($parts)." parça · {$freeCount} adres bölünmemiş",
+            default => count($parts).' parça',
+        };
+
         return [
             'record' => $block['record'],
             'notation' => long2ip($block['start']).'/24',
-            'partsLabel' => match (true) {
-                $parts === [] => 'Bölünmedi',
-                $freeCount > 0 => count($parts)." parça · {$freeCount} adres bölünmemiş",
-                default => count($parts).' parça',
+            'partsLabel' => $partsLabel,
+            'note' => implode(' · ', array_filter([$partsLabel, $block['record']->description], filled(...))),
+            /* Kullanılan adres: bölünmemiş blok tek kayıttır, kullanılıyorsa 256'sı da. */
+            'used' => $parts === [] ? ($this->inUse($block['record']) ? 256 : 0) : $used,
+            /*
+             * Bölünmemiş blok bütünüyle tek kayıttır: adı varsa dolu, gateway'i
+             * yanıt veriyorsa kullanılıyor. Bölünmüşte ad bloğun etiketidir;
+             * doluluk parçalardan gelir.
+             */
+            ...match (true) {
+                $parts === [] && filled($block['record']->name) => ['state' => 'full', 'stateLabel' => 'Dolu', 'badge' => BadgeVariant::Red],
+                $parts === [] && $block['record']->gateway_up => ['state' => 'full', 'stateLabel' => 'Kullanılıyor', 'badge' => BadgeVariant::Red],
+                default => $this->state($used, 256),
             },
-            'used' => $used,
-            ...($parts === [] && $block['record']->gateway_up
-                ? ['state' => 'full', 'stateLabel' => 'Kullanılıyor', 'badge' => BadgeVariant::Red]
-                : $this->state($used, 256)),
             'pingable' => $parts === [],
             'ping' => $parts === [] ? $this->ping->of($block['record']) : null,
             'open' => ($openBlock !== null && $block['record']->uuid === $openBlock)
@@ -237,6 +249,24 @@ class Ipv4BlockPlan
     }
 
     /** Yüzde tam sayıya yuvarlanır; ama dolu olmayan blok %100, boş olmayan %0 görünmez. */
+    /**
+     * Blokların boş payı: "%62 boşta"; blok yoksa null (IPv6, tek adres).
+     *
+     * @param  iterable<array<string, mixed>>  $blocks  build()['blocks']
+     */
+    public function freeLabel(iterable $blocks): ?string
+    {
+        $space = 0;
+        $used = 0;
+
+        foreach ($blocks as $block) {
+            $space += 256;
+            $used += $block['used'];
+        }
+
+        return $space === 0 ? null : '%'.$this->percent($space - $used, $space).' boşta';
+    }
+
     private function percent(int $used, int $space): int
     {
         $percent = (int) round($used * 100 / $space);

@@ -48,6 +48,7 @@ class IpAddressListing
             ->withCount('ipAddresses')->with('subGroups')->get();
 
         $selectedGroup = $groups->firstWhere('uuid', $request->query('grup'));
+        $sort = in_array($request->query('sira'), ['bos', 'dolu'], true) ? $request->query('sira') : null;
         $selected = $this->selected($request, $user);
         $window = $this->window($request, $selected);
         $creatable = $this->creatableGroups($user, $groups);
@@ -55,9 +56,11 @@ class IpAddressListing
         return [
             'groups' => $groups,
             'allCount' => $groups->sum('ip_addresses_count'),
+            ...$this->freeLabels($user, $groups),
             'selectedGroup' => $selectedGroup,
             'query' => $query,
-            'sections' => $this->sections($user, $selectedGroup, $query, $request->string('blok')->toString() ?: null, $selected['uuid'] ?? null),
+            'sections' => $this->sections($user, $selectedGroup, $query, $request->string('blok')->toString() ?: null, $selected['uuid'] ?? null, $sort),
+            'sort' => $this->sortLink($sort, $selectedGroup, $query),
             'selected' => $selected,
             'window' => $window,
             'canCreate' => $creatable !== [],
@@ -69,13 +72,36 @@ class IpAddressListing
     }
 
     /**
+     * Grup listesindeki boş pay: grubun /24 bloklarında boşta kalan adres
+     * (bkz. Ipv4BlockPlan::freeLabel). Yalnız görülebilen kayıtlardan.
+     *
+     * @param  Collection<int, AddressGroup>  $groups
+     * @return array{groupFree: array<string, string>, allFree: string|null} grup uuid'i => etiket
+     */
+    private function freeLabels(User $user, Collection $groups): array
+    {
+        $blocks = collect($this->plan->build(IpAddress::query()->visibleTo($user)->ordered()->get())['blocks']);
+        /* Sıralı anahtar sayfaya çıkmaz: grup uuid'ine çevrilir. */
+        $uuids = $groups->pluck('uuid', 'id');
+
+        return [
+            'groupFree' => $blocks->groupBy(fn (array $b): string => (string) $uuids->get($b['record']->address_group_id))
+                ->map(fn ($groupBlocks): ?string => $this->plan->freeLabel($groupBlocks))->filter()->all(),
+            'allFree' => $this->plan->freeLabel($blocks),
+        ];
+    }
+
+    /**
      * Listedeki bölümler. Grup seçiliyse alt gruplarına göre bölünür; "Hepsi"
      * tek bölümdür ve satırda grubun adı da yazar. Parça, alt grubu ne olursa
      * olsun bloğunun altında durur.
      *
-     * @return array<int, array{title: string|null, blocks: list<array<string, mixed>>, rows: Collection<int, IpAddress>}>
+     * Alt grup bölümü katlanır, kapalı gelir; seçili kayıt ya da açılacak
+     * blok içindeyse açık gelir.
+     *
+     * @return array<int, array{title: string|null, summary: string|null, open: bool, blocks: list<array<string, mixed>>, rows: Collection<int, IpAddress>}>
      */
-    private function sections(User $user, ?AddressGroup $group, string $query, ?string $openBlock, ?string $selected): array
+    private function sections(User $user, ?AddressGroup $group, string $query, ?string $openBlock, ?string $selected, ?string $sort): array
     {
         $records = IpAddress::query()->visibleTo($user)
             ->when($group, fn ($q, AddressGroup $g) => $q->whereBelongsTo($g, 'group'))
@@ -85,29 +111,81 @@ class IpAddressListing
             ->get();
 
         if ($query !== '') {
-            return [['title' => null, 'blocks' => [], 'rows' => $records]];
+            return [['title' => null, 'summary' => null, 'open' => true, 'blocks' => [], 'rows' => $records]];
         }
 
         $plan = $this->plan->build($records, $openBlock, $selected);
+        $plan['blocks'] = $this->sortBlocks($plan['blocks'], $sort);
         $rows = new Collection($plan['others']);
 
         if ($group === null || $group->subGroups->isEmpty()) {
-            return [['title' => null, 'blocks' => $plan['blocks'], 'rows' => $rows]];
+            return [['title' => null, 'summary' => null, 'open' => true, 'blocks' => $plan['blocks'], 'rows' => $rows]];
         }
 
         $blocksBy = collect($plan['blocks'])->groupBy(fn (array $b): string => (string) $b['record']->sub_group_id);
         $rowsBy = $rows->groupBy(fn (IpAddress $r): string => (string) $r->sub_group_id);
-        $section = fn (?string $title, string $key): array => [
-            'title' => $title,
-            'blocks' => $blocksBy->get($key, collect())->all(),
-            'rows' => $rowsBy->get($key, new Collection),
-        ];
+        $section = function (string $title, string $key) use ($blocksBy, $rowsBy, $selected): array {
+            $blocks = $blocksBy->get($key, collect());
+            $rows = $rowsBy->get($key, new Collection);
+
+            return [
+                'title' => $title,
+                'summary' => implode(' · ', array_filter([
+                    $blocks->isNotEmpty() ? $blocks->count().' blok' : null,
+                    $rows->isNotEmpty() ? $rows->count().' adres' : null,
+                    $this->plan->freeLabel($blocks),
+                ])),
+                'open' => $blocks->contains(fn (array $b): bool => $b['open'] || $b['record']->uuid === $selected)
+                    || $rows->contains(fn (IpAddress $r): bool => $r->uuid === $selected),
+                'blocks' => $blocks->all(),
+                'rows' => $rows,
+            ];
+        };
 
         $sections = $group->subGroups->map(fn (SubGroup $sub): array => $section($sub->name, (string) $sub->id))->all();
         $sections[] = $section('Alt grupsuz', '');
 
         return array_values(array_filter($sections, fn (array $s): bool => $s['blocks'] !== [] || $s['rows']->isNotEmpty()))
-            ?: [['title' => null, 'blocks' => [], 'rows' => new Collection]];
+            ?: [['title' => null, 'summary' => null, 'open' => true, 'blocks' => [], 'rows' => new Collection]];
+    }
+
+    /**
+     * Boş/dolu sıralaması: blokları kullanılan adres sayısına göre dizer;
+     * eşitler adres sırasında kalır (usort kararlıdır). Bloğa girmeyen
+     * satırların doluluğu yok, onlar yerinde durur.
+     *
+     * @param  list<array<string, mixed>>  $blocks
+     * @return list<array<string, mixed>>
+     */
+    private function sortBlocks(array $blocks, ?string $sort): array
+    {
+        if ($sort !== null) {
+            usort($blocks, fn (array $a, array $b): int => $sort === 'bos' ? $a['used'] <=> $b['used'] : $b['used'] <=> $a['used']);
+        }
+
+        return $blocks;
+    }
+
+    /**
+     * Tür sütun başlığındaki sıralama ikonu: tıkladıkça adres sırası →
+     * boşlar önce → dolular önce → adres sırası. Grup ve arama korunur.
+     *
+     * @return array{icon: string, label: string, url: string, active: bool}
+     */
+    private function sortLink(?string $sort, ?AddressGroup $group, string $query): array
+    {
+        $next = ['bos' => 'dolu', 'dolu' => null][$sort] ?? 'bos';
+
+        return [
+            'icon' => ['bos' => '↑', 'dolu' => '↓'][$sort] ?? '↕',
+            'label' => match ($sort) {
+                'bos' => 'Boşlar önce; dolular önce sırala',
+                'dolu' => 'Dolular önce; adres sırasına dön',
+                default => 'Boş/dolu durumuna göre sırala',
+            },
+            'url' => route('ip-addresses.index', array_filter(['grup' => $group?->uuid, 'q' => $query, 'sira' => $next])),
+            'active' => $sort !== null,
+        ];
     }
 
     /** @return array<string, mixed>|null */

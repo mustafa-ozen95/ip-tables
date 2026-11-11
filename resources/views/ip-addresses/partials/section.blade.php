@@ -1,38 +1,20 @@
+{{--
+    Listede bir bölüm. Alt grup bölümü katlanır ve kapalı gelir; başlıkta
+    blok sayısı ve boş pay durur. Seçili kayıt ya da açılacak blok içindeyse
+    açık gelir (bkz. IpAddressListing::sections).
+--}}
 @if ($section['title'] !== null)
-    <div class="credential-section">
-        <span class="credential-section__name">{{ $section['title'] }}</span>
-    </div>
-@endif
-
-@foreach ($section['blocks'] as $block)
-    @include('ip-addresses.partials.block')
-@endforeach
-
-@forelse ($section['rows'] as $row)
-    <div class="grid-row address-row"
-         @if ($selected && $selected['uuid'] === $row->uuid) aria-selected="true" @endif>
-        <span class="address-row__address mono truncate">{{ $row->notation }}</span>
-
-        <span class="address-row__name truncate">
-            @include('ip-addresses.partials.record-name', ['record' => $row])
-            @if ($selectedGroup === null)
-                <span class="text-sm text-muted">· {{ $row->location }}</span>
+    <details class="sub-group" @if ($section['open']) open @endif>
+        <summary class="credential-section sub-group__head">
+            <span class="block-node__toggle" aria-hidden="true"></span>
+            <span class="credential-section__name">{{ $section['title'] }}</span>
+            @if ($section['summary'])
+                <span class="sub-group__meta">{{ $section['summary'] }}</span>
             @endif
-        </span>
+        </summary>
 
-        <span class="address-row__type">
-            <x-ui.badge :variant="$row->group->kind->badge()">{{ $row->group->kind->label() }}</x-ui.badge>
-        </span>
-
-        <span class="address-row__description text-sm text-muted truncate">{{ $row->description ?? '' }}</span>
-
-        <span class="address-row__actions">
-            @include('ip-addresses.partials.row-actions', ['record' => $row])
-        </span>
-    </div>
-@empty
-    @if ($section['blocks'] === [])
-        <x-ui.empty :title="$query ? 'Eşleşen adres yok' : 'Adres yok'"
-                    :text="$query ? 'Başka bir arama deneyin.' : 'Bu gruba henüz adres eklenmemiş.'" />
-    @endif
-@endforelse
+        @include('ip-addresses.partials.section-body')
+    </details>
+@else
+    @include('ip-addresses.partials.section-body')
+@endif

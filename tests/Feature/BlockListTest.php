@@ -76,7 +76,8 @@ class BlockListTest extends TestCase
         $this->liste($this->kullanici())
             ->assertOk()
             ->assertDontSee('Blok planı')
-            ->assertSeeInOrder(['198.51.100.0/24', 'musteri-a', 'Boş', 'Bölünmedi', '198.51.102.0/24', 'musteri-b', '%50 dolu', '2 parça'])
+            ->assertDontSee('Bölünmedi')
+            ->assertSeeInOrder(['198.51.100.0/24', 'musteri-a', 'Dolu', '198.51.102.0/24', 'musteri-b', '%50 dolu', '2 parça'])
             ->assertSeeInOrder(['198.51.102.0/25', '198.51.102.1', '198.51.102.2', '198.51.102.126', '255.255.255.128', 'baglanti-x', 'Dolu'])
             ->assertSeeInOrder(['2 parça', 'v6-sunucu'])
             ->assertSee('<details class="block-node" >', false);
@@ -307,5 +308,50 @@ class BlockListTest extends TestCase
             ->assertOk()
             ->assertDontSee('Adresi sil')
             ->assertSee($this->bagla($parca, 'duzenle'));
+    }
+
+    /** Tür başlığındaki ikon: adres sırası → boşlar önce → dolular önce → adres sırası. */
+    #[Test]
+    public function bloklar_bos_dolu_durumuna_gore_siralanir(): void
+    {
+        $this->adres('192.0.2.0/24', 'dolu-blok');
+        $this->adres('198.51.100.0/24');
+        $this->adres('203.0.113.0/24', 'yarim-blok');
+        $this->adres('203.0.113.0/25', 'parca-a');
+        $kullanici = $this->kullanici();
+
+        $this->liste($kullanici)
+            ->assertSeeInOrder(['192.0.2.0/24', '198.51.100.0/24', '203.0.113.0/24'])
+            ->assertSee(e(route('ip-addresses.index', ['grup' => $this->grup->uuid, 'sira' => 'bos'])), false);
+
+        $this->liste($kullanici, ['sira' => 'bos'])
+            ->assertSeeInOrder(['198.51.100.0/24', '203.0.113.0/24', '192.0.2.0/24'])
+            ->assertSee('sort-toggle--active', false)
+            ->assertSee(e(route('ip-addresses.index', ['grup' => $this->grup->uuid, 'sira' => 'dolu'])), false);
+
+        $this->liste($kullanici, ['sira' => 'dolu'])
+            ->assertSeeInOrder(['192.0.2.0/24', '203.0.113.0/24', '198.51.100.0/24'])
+            ->assertSee('href="'.e(route('ip-addresses.index', ['grup' => $this->grup->uuid])).'"', false);
+
+        /* Bilinmeyen değer adres sırasıdır. */
+        $this->liste($kullanici, ['sira' => 'xyz'])
+            ->assertSeeInOrder(['192.0.2.0/24', '198.51.100.0/24', '203.0.113.0/24'])
+            ->assertDontSee('sort-toggle--active', false);
+    }
+
+    /** Grup listesinde grubun yanında boş pay; açıklama listede kırpılmadan yazar. */
+    #[Test]
+    public function grup_yaninda_bos_pay_aciklama_tam(): void
+    {
+        $this->adres('192.0.2.0/24', 'dolu-blok');
+        $this->adres('198.51.100.0/24');
+        $parca = $this->adres('203.0.113.0/25', 'parca-a');
+        $this->adres('203.0.113.0/24', 'blok-c');
+        $parca->update(['description' => 'uzun bir açıklama metni sonuna kadar okunur']);
+
+        $this->liste($this->kullanici())
+            ->assertSee('%50 boşta · 4', false)
+            ->assertSee('<div class="text-sm text-muted part-note">uzun bir açıklama metni sonuna kadar okunur</div>', false)
+            ->assertDontSee('address-row__description text-sm text-muted truncate', false);
     }
 }
