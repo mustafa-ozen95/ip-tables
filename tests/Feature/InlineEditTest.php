@@ -136,6 +136,20 @@ class InlineEditTest extends TestCase
             ->assertSee('data-inline-url="'.route('ip-addresses.field', $parca).'"', false);
     }
 
+    /** Bölünmemiş /24 satırı da düzenlenir; bölünmüş bloğun başlığı katlanır, düzenlenmez. */
+    #[Test]
+    public function bolunmemis_blok_satiri_da_duzenlenir(): void
+    {
+        $parca = $this->parca();
+        $tek = IpAddress::factory()->for($this->grup, 'group')->address('198.51.100.0/24')->create(['name' => 'TEK BLOK']);
+        $bolunmus = IpAddress::query()->where('address', '192.0.2.0')->where('prefix', 24)->firstOrFail();
+
+        $this->actingAs($this->kullanici(['view', 'update']))->get(route('ip-addresses.index', ['grup' => $this->grup->uuid]))
+            ->assertSee('data-inline-url="'.route('ip-addresses.field', $tek).'"', false)
+            ->assertSee('data-inline-url="'.route('ip-addresses.field', $parca).'"', false)
+            ->assertDontSee('data-inline-url="'.route('ip-addresses.field', $bolunmus).'"', false);
+    }
+
     #[Test]
     public function oturumsuz_istek_girise_doner(): void
     {

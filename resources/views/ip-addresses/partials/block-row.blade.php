@@ -8,8 +8,10 @@
     @endif
 </span>
 
+{{-- Bölünmemiş blokta ad ve açıklama çift tıklayarak düzenlenir (bkz. inline-edit.js).
+     Bölünmüş bloğun satırı katlanır başlıktır; tıklama bloğu açar, düzenleme ⋮'den. --}}
 <span class="address-row__name truncate">
-    @include('ip-addresses.partials.record-name', ['record' => $block['record']])
+    <span @if ($block['parts'] === []) @can('update', $block['record']) @include('ip-addresses.partials.inline-edit-attrs', ['record' => $block['record'], 'field' => 'name', 'value' => $block['record']->name]) title="Düzenlemek için çift tıklayın" @endcan @endif>@include('ip-addresses.partials.record-name', ['record' => $block['record']])</span>
     @if ($selectedGroup === null)
         <span class="text-sm text-muted">· {{ $block['record']->location }}</span>
     @endif
@@ -19,7 +21,8 @@
     <x-ui.badge :variant="$block['badge']">{{ $block['stateLabel'] }}</x-ui.badge>
 </span>
 
-<span class="address-row__description text-sm text-muted">{{ $block['note'] }}</span>
+<span class="address-row__description text-sm text-muted"
+      @if ($block['parts'] === []) @can('update', $block['record']) @include('ip-addresses.partials.inline-edit-attrs', ['record' => $block['record'], 'field' => 'description', 'value' => $block['record']->description]) title="Düzenlemek için çift tıklayın" @endcan @endif>{{ $block['note'] }}</span>
 
 <span class="address-row__actions">
     @include('ip-addresses.partials.row-actions', ['record' => $block['record']])
