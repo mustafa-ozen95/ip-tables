@@ -234,6 +234,12 @@
 .inline-edit .input { flex: 1; min-width: 0; }
 
 /*
+ * AÇIKLAMA YOK: açıklaması olmayan kayıtta yazar; gerçek açıklamayla
+ * karışmasın diye eğiktir. Kardeş panellerde boş alan için yer tutucu yok.
+ */
+.description-empty { font-style: italic; }
+
+/*
  * VURGU SEÇİMİ: açılır listede her renk kendi renginde şerittir; seçilince
  * kutunun solunda aynı renkte şerit durur. Ortak .select değişmez, yalnız
  * seçenek ve kenar rengi verilir. (macOS tarayıcıları seçenek rengini

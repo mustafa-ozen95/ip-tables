@@ -170,6 +170,25 @@ class InlineEditTest extends TestCase
         $this->assertSame(2, IpAddress::query()->count());
     }
 
+    /** Açıklaması olmayan kayıtta "Açıklama yok" yazar; düzenleme boş değerle açılır. */
+    #[Test]
+    public function aciklamasi_olmayan_kayitta_aciklama_yok_yazar(): void
+    {
+        $parca = $this->parca();
+        $liste = route('ip-addresses.index', ['grup' => $this->grup->uuid]);
+
+        $this->actingAs($this->kullanici(['view', 'update']))->get($liste)
+            ->assertSee('<span class="description-empty">Açıklama yok</span>', false)
+            ->assertSee('data-inline-value=""', false);
+
+        $parca->update(['description' => 'K13 ROUTE']);
+        IpAddress::query()->where('prefix', 24)->update(['description' => 'BLOK NOTU']);
+
+        $this->actingAs($this->kullanici(['view']))->get($liste)
+            ->assertSee('K13 ROUTE')
+            ->assertDontSee('Açıklama yok');
+    }
+
     /** Yerleşik roller: Network yalnız görür ve ad/açıklama düzenler; diğerleri yalnız görür. */
     #[Test]
     public function yerlesik_rol_sablonlari(): void

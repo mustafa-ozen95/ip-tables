@@ -20,7 +20,7 @@
         </span>
 
         <span class="address-row__description text-sm text-muted"
-              @can('updateDetails', $row) @include('ip-addresses.partials.inline-edit-attrs', ['record' => $row, 'field' => 'description', 'value' => $row->description]) title="Düzenlemek için çift tıklayın" @endcan>{{ $row->description ?? '' }}</span>
+              @can('updateDetails', $row) @include('ip-addresses.partials.inline-edit-attrs', ['record' => $row, 'field' => 'description', 'value' => $row->description]) title="Düzenlemek için çift tıklayın" @endcan>@include('ip-addresses.partials.description', ['text' => $row->description])</span>
 
         <span class="address-row__actions">
             @include('ip-addresses.partials.row-actions', ['record' => $row])

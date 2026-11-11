@@ -22,7 +22,7 @@
 </span>
 
 <span class="address-row__description text-sm text-muted"
-      @if ($block['parts'] === []) @can('updateDetails', $block['record']) @include('ip-addresses.partials.inline-edit-attrs', ['record' => $block['record'], 'field' => 'description', 'value' => $block['record']->description]) title="Düzenlemek için çift tıklayın" @endcan @endif>{{ $block['note'] }}</span>
+      @if ($block['parts'] === []) @can('updateDetails', $block['record']) @include('ip-addresses.partials.inline-edit-attrs', ['record' => $block['record'], 'field' => 'description', 'value' => $block['record']->description]) title="Düzenlemek için çift tıklayın" @endcan @endif>@include('ip-addresses.partials.description', ['text' => $block['note']])</span>
 
 <span class="address-row__actions">
     @include('ip-addresses.partials.row-actions', ['record' => $block['record']])

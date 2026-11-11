@@ -112,10 +112,7 @@ export function init() {
         open(field);
     });
 
-    /*
-     * Açıklaması olmayan parçada açıklama satırı boştur ve yer kaplamaz;
-     * hücrenin boş yerine çift tıklamak onu açar.
-     */
+    /* Ad hücresinin boş yerine çift tıklamak da açıklamayı açar. */
     on('dblclick', '[data-inline-cell]', (event, cell) => {
         if (event.target !== cell) {
             return;
