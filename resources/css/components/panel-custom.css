@@ -267,9 +267,13 @@
 }
 
 /*
- * BOŞ PAY: grup listesinde ve alt grup başlığında "Dolu" kırmızı yazar;
- * renk Dolu rozetinin yazı rengidir (badge--red).
+ * BOŞ PAY: grup listesinde ve alt grup başlığında "%X boşta" yeşil, "Dolu"
+ * kırmızı yazar; renkler Boş/Dolu rozetlerinin yazı renkleridir.
  */
+.free-share--free {
+    color: var(--color-green-fg);
+}
+
 .free-share--full {
     color: var(--color-red-fg);
 }

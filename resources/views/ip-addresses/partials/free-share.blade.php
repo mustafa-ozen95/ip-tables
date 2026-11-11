@@ -1,2 +1,2 @@
-{{-- Boş pay ("%62 boşta"); hiç boş yoksa "Dolu" kırmızı (bkz. Ipv4BlockPlan::freeShare). --}}
-<span @class(['free-share--full' => $share['full']])>{{ $share['label'] }}</span>
+{{-- Boş pay: "%62 boşta" yeşil, hiç boş yoksa "Dolu" kırmızı (bkz. Ipv4BlockPlan::freeShare). --}}
+<span @class(['free-share--full' => $share['full'], 'free-share--free' => ! $share['full']])>{{ $share['label'] }}</span>
