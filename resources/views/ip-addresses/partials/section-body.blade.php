@@ -1,9 +1,9 @@
-{{-- Bölümün blokları ve tek adresleri (bkz. section). --}}
+{{-- Bölümün blokları, tek adresleri ve IPv6 tablosu (bkz. section, IpAddressListing::tabled). --}}
 @foreach ($section['blocks'] as $block)
     @include('ip-addresses.partials.block')
 @endforeach
 
-@forelse ($section['rows'] as $row)
+@foreach ($section['rows'] as $row)
     <div class="grid-row address-row"
          @if ($selected && $selected['uuid'] === $row->uuid) aria-selected="true" @endif>
         <span class="address-row__address mono truncate">{{ $row->notation }}</span>
@@ -26,9 +26,11 @@
             @include('ip-addresses.partials.row-actions', ['record' => $row])
         </span>
     </div>
-@empty
-    @if ($section['blocks'] === [])
-        <x-ui.empty :title="$query ? 'Eşleşen adres yok' : 'Adres yok'"
-                    :text="$query ? 'Başka bir arama deneyin.' : 'Bu gruba henüz adres eklenmemiş.'" />
-    @endif
-@endforelse
+@endforeach
+
+@include('ip-addresses.partials.ipv6-table')
+
+@if ($section['blocks'] === [] && $section['rows']->isEmpty() && $section['table'] === [])
+    <x-ui.empty :title="$query ? 'Eşleşen adres yok' : 'Adres yok'"
+                :text="$query ? 'Başka bir arama deneyin.' : 'Bu gruba henüz adres eklenmemiş.'" />
+@endif

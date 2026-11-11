@@ -120,7 +120,7 @@ class IpAddressListing
         if ($query !== '') {
             return [$this->flatSection(IpAddress::query()->visibleTo($user)
                 ->when($group, fn ($q, AddressGroup $g) => $q->whereBelongsTo($g, 'group'))
-                ->search($query)->with(['group', 'subGroup'])->ordered()->get())];
+                ->search($query)->with(['group', 'subGroup'])->ordered()->get(), [], $selected)];
         }
 
         $inGroup = fn (IpAddress $r): bool => $group === null || $r->address_group_id === $group->id;
@@ -128,7 +128,7 @@ class IpAddressListing
         $rows = (new Collection($plan['others']))->filter($inGroup)->values();
 
         if ($group !== null && $group->subGroups->isEmpty()) {
-            return [$this->flatSection($rows, $blocks)];
+            return [$this->flatSection($rows, $blocks, $selected)];
         }
 
         $by = fn (IpAddress $r): string => (string) ($group === null ? $r->address_group_id : $r->sub_group_id);
@@ -158,9 +158,9 @@ class IpAddressListing
                     || $blocks->contains(fn (array $b): bool => $b['open'] || $b['record']->uuid === $selected)
                     || $rows->contains(fn (IpAddress $r): bool => $r->uuid === $selected),
                 'blocks' => $blocks->all(),
-                'rows' => $rows,
+                ...$this->tabled($rows, $group === null, $selected),
             ];
-        })->filter(fn (array $s): bool => $s['blocks'] !== [] || $s['rows']->isNotEmpty())->values()->all();
+        })->filter(fn (array $s): bool => $s['blocks'] !== [] || $s['rows']->isNotEmpty() || $s['table'] !== [])->values()->all();
 
         /*
          * Tek bölüm kapalı gelseydi her seferinde bir tıklama eklerdi; ama
@@ -176,7 +176,55 @@ class IpAddressListing
     /** @param  array<string, mixed>  $section */
     private function size(array $section): int
     {
-        return array_sum(array_map(fn (array $b): int => 1 + count($b['parts']), $section['blocks'])) + $section['rows']->count();
+        return array_sum(array_map(fn (array $b): int => 1 + count($b['parts']), $section['blocks']))
+            + $section['rows']->count() + array_sum(array_map(fn (array $t): int => 1 + count($t['parts']), $section['table']));
+    }
+
+    /**
+     * IPv6 kaydı IPv4 parçası gibi tabloda durur: ağ geçidi, ilk ve son
+     * adres (bkz. Ipv4BlockPlan::part). Diğer tek adresler satırdır.
+     *
+     * Tablo alt gruba (/48) göre bölünür; bölüm o alt grubun kendisi
+     * değilse ($headed) alt grup IPv4'teki /24 bloğu gibi katlanır başlıktır.
+     *
+     * @param  Collection<int, IpAddress>  $rows
+     * @return array{rows: Collection<int, IpAddress>, table: list<array<string, mixed>>}
+     */
+    private function tabled(Collection $rows, bool $headed = true, ?string $selected = null): array
+    {
+        [$ipv6, $rest] = $rows->partition(fn (IpAddress $r): bool => str_contains($r->address, ':'));
+        $bySub = $headed ? $ipv6->groupBy(fn (IpAddress $r): string => (string) $r->sub_group_id) : collect([$ipv6]);
+
+        return ['rows' => $rest->values(), 'table' => $bySub->map(fn (Collection $records): array => [
+            'heading' => $headed ? $this->ipv6Heading($records, $selected) : null,
+            'parts' => $records->map($this->plan->part(...))->values()->all(),
+        ])->values()->all()];
+    }
+
+    /**
+     * Alt grubun (/48) başlık satırı; alt grupsuz kayıtların başlığı yoktur.
+     *
+     * @param  Collection<int, IpAddress>  $records
+     * @return array<string, mixed>|null
+     */
+    private function ipv6Heading(Collection $records, ?string $selected): ?array
+    {
+        $sub = $records->first()->subGroup;
+
+        if ($sub === null) {
+            return null;
+        }
+
+        $used = $records->filter(fn (IpAddress $r): bool => filled($r->name) || $r->gateway_up)->count();
+
+        return [
+            'key' => 'alt:'.$sub->uuid,
+            'notation' => $sub->name,
+            'location' => $records->first()->group->name,
+            'note' => $records->count().' parça',
+            'open' => $records->contains(fn (IpAddress $r): bool => $r->uuid === $selected),
+            ...$this->plan->state($used, $records->count()),
+        ];
     }
 
     /**
@@ -186,9 +234,9 @@ class IpAddressListing
      * @param  list<array<string, mixed>>  $blocks
      * @return array<string, mixed>
      */
-    private function flatSection(Collection $rows, array $blocks = []): array
+    private function flatSection(Collection $rows, array $blocks = [], ?string $selected = null): array
     {
-        return ['title' => null, 'summary' => null, 'free' => null, 'open' => true, 'blocks' => $blocks, 'rows' => $rows];
+        return ['title' => null, 'summary' => null, 'free' => null, 'open' => true, 'blocks' => $blocks, ...$this->tabled($rows, true, $selected)];
     }
 
     /**

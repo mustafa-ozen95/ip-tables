@@ -476,4 +476,45 @@ class IpAddressScreenTest extends TestCase
 
         $this->assertContains(['sort_key', 'prefix'], $dizinler);
     }
+
+    /**
+     * IPv6 KAYDI DA PARÇA TABLOSUNDA: ağ geçidi, ilk ve son adres görünür
+     * (IPv4 parçası gibi). Yayın adresi yok: /126'da ::1 geçit, ::2–::3.
+     * Gateway pingi yalnız IPv4 bloklarınındır; IPv6'da ↻ çizilmez.
+     */
+    #[Test]
+    public function ipv6_kaydi_tabloda_gateway_ilk_ve_son_adresiyle_durur(): void
+    {
+        $grup = AddressGroup::query()->where('kind', GroupKind::Ipv6)->firstOrFail();
+        $kayit = IpAddress::factory()->for($grup, 'group')->address('2001:db8:0:1::/126')
+            ->create(['name' => null, 'description' => 'Cihaz A 2001:db8:0:1::1']);
+
+        $this->actingAs(User::factory()->admin()->create())
+            ->get(route('ip-addresses.index', ['grup' => $grup->uuid]))
+            ->assertOk()
+            ->assertSeeInOrder(['<th>Ağ</th>', 'Ağ geçidi', 'İlk adres', 'Son adres', 'Maske', '<th>Ad</th>', '<th>Durum</th>'], false)
+            ->assertSeeInOrder(['2001:db8:0:1::/126', '2001:db8:0:1::1', '2001:db8:0:1::2', '2001:db8:0:1::3', 'Boş'])
+            ->assertDontSee(route('ip-addresses.ping', $kayit));
+    }
+
+    #[Test]
+    public function ipv6_alt_grubu_hepside_ipv4_blogu_gibi_katlanir_baslik_olur(): void
+    {
+        $grup = AddressGroup::query()->where('kind', GroupKind::Ipv6)->firstOrFail();
+        $alt = SubGroup::factory()->for($grup, 'group')->create(['name' => '2001:db8::/48', 'position' => 1]);
+        IpAddress::factory()->for($grup, 'group')->for($alt, 'subGroup')->address('2001:db8:0:1::/126')->create(['name' => 'Müşteri']);
+        IpAddress::factory()->for($grup, 'group')->for($alt, 'subGroup')->address('2001:db8:0:2::/126')->create(['name' => null]);
+        $admin = User::factory()->admin()->create();
+
+        $this->actingAs($admin)->get(route('ip-addresses.index', ['bolum' => $grup->uuid]))
+            ->assertOk()
+            ->assertSee('data-open-key="alt:'.$alt->uuid.'"', false)
+            ->assertSeeInOrder(['2001:db8::/48', '%50 dolu', '2 parça', '2001:db8:0:1::/126', '2001:db8:0:2::/126']);
+
+        /* Alt grubun kendi bölümünde başlık bölümün başlığıdır; ikinci kez yazılmaz. */
+        $this->actingAs($admin)->get(route('ip-addresses.index', ['grup' => $grup->uuid, 'bolum' => $alt->uuid]))
+            ->assertOk()
+            ->assertDontSee('data-open-key="alt:', false)
+            ->assertSee('2001:db8:0:2::/126');
+    }
 }

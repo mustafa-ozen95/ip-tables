@@ -151,9 +151,13 @@ class Ipv4BlockPlan
      * Parça satırı: ağ geçidi bloğun ilk kullanılabilir adresi, müşteriye
      * verilen aralık ondan sonrası (ör. /29: .1 geçit, .2–.6 müşteri).
      *
+     * IPv6 kaydı da bu satırla tabloda durur (bkz. IpAddressListing): yayın
+     * adresi olmadığından son adres de verilir (/126: ::1 geçit, ::2–::3);
+     * maske yoktur. Gateway pingi yalnız IPv4 bloklarınındır (GatewayPing).
+     *
      * @return array<string, mixed>
      */
-    private function part(IpAddress $record): array
+    public function part(IpAddress $record): array
     {
         $cidr = Cidr::make($record->address, $record->prefix);
         $hosts = ! $cidr->isSingleHost() && ! $cidr->isPointToPoint();
@@ -163,10 +167,10 @@ class Ipv4BlockPlan
             'record' => $record,
             'notation' => $cidr->toString(),
             'gateway' => $hosts ? $cidr->firstUsable() : null,
-            'first' => $hosts ? long2ip(ip2long($cidr->firstUsable()) + 1) : $cidr->firstUsable(),
+            'first' => $hosts ? inet_ntop(Cidr::increment(inet_pton($cidr->firstUsable()))) : $cidr->firstUsable(),
             'last' => $cidr->lastUsable(),
             'mask' => $cidr->netmask(),
-            'pingable' => $hosts,
+            'pingable' => $hosts && ! $cidr->isIpv6,
             'ping' => $this->ping->of($record),
             ...match (true) {
                 filled($record->name) => ['stateLabel' => 'Dolu', 'badge' => BadgeVariant::Red],
@@ -209,11 +213,12 @@ class Ipv4BlockPlan
     }
 
     /**
-     * $space: bloğun alanı; $used: ondan atanan.
+     * $space: bloğun alanı; $used: ondan atanan. IPv6 /48 başlığı parça
+     * sayısıyla çağırır (bkz. IpAddressListing::tabled).
      *
      * @return array{state: string, stateLabel: string, badge: BadgeVariant}
      */
-    private function state(int $used, int $space): array
+    public function state(int $used, int $space): array
     {
         return match (true) {
             $used === 0 => ['state' => 'free', 'stateLabel' => 'Boş', 'badge' => BadgeVariant::Green],
