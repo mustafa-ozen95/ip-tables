@@ -77,4 +77,19 @@ class HighlightTest extends TestCase
 
         $this->assertDatabaseCount('ip_addresses', 0);
     }
+
+    /** Renk açılır listede değil, adın listede görüneceği renkte seçenek olarak durur; kaydın rengi seçili gelir. */
+    #[Test]
+    public function renkler_gorunerek_secilir(): void
+    {
+        $kayit = IpAddress::factory()->for($this->grup, 'group')->address('192.0.2.0/24')->create(['name' => 'blok', 'highlight' => 'green']);
+        $html = preg_replace('/\s+/', ' ', $this->actingAs($this->yetkili())
+            ->get(route('ip-addresses.index', ['grup' => $this->grup->uuid, 'kayit' => $kayit->uuid, 'pencere' => 'duzenle']))
+            ->assertOk()->getContent());
+
+        $this->assertStringNotContainsString('<select class="select" name="highlight"', $html);
+        $this->assertStringContainsString('<span class="dot dot--red" aria-hidden="true"></span> <span class="highlight highlight--red">Kırmızı</span>', $html);
+        $this->assertStringContainsString('<input type="radio" name="highlight" value="green" checked>', $html);
+        $this->assertStringNotContainsString('value="red" checked', $html);
+    }
 }

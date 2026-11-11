@@ -53,7 +53,21 @@
             </x-form.field>
 
             <x-form.field name="highlight" label="Vurgu rengi" hint="Seçilirse ad listede kalın ve bu renkte yazılır; dikkat çekmesi gerekenler için.">
-                <x-form.select name="highlight" :options="App\Enums\Highlight::options()" :selected="$record?->highlight?->value" />
+                {{-- Açılır liste rengi göstermez; seçenekler adın listede görüneceği renkte yan yana durur. --}}
+                <div class="choices" role="radiogroup" aria-label="Vurgu rengi">
+                    @foreach (App\Enums\Highlight::options() as $value => $label)
+                        <label class="checkbox">
+                            <input type="radio" name="highlight" value="{{ $value }}" @if ($value === '') id="highlight" @endif
+                                   @checked((string) old('highlight', $record?->highlight?->value) === (string) $value)>
+                            @if ($value === '')
+                                {{ $label }}
+                            @else
+                                <span class="dot dot--{{ $value }}" aria-hidden="true"></span>
+                                <span class="highlight highlight--{{ $value }}">{{ $label }}</span>
+                            @endif
+                        </label>
+                    @endforeach
+                </div>
             </x-form.field>
 
             <x-form.field name="description" label="Açıklama">
