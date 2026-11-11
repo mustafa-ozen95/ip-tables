@@ -32,8 +32,11 @@ return [
         'enabled' => (bool) env('GATEWAY_PING_ENABLED', true),
         'binary' => env('GATEWAY_PING_BINARY', 'ping'),
         'timeout' => (int) env('GATEWAY_PING_TIMEOUT', 1),
-        'interval' => (int) env('GATEWAY_PING_INTERVAL', 600),
-        'spread' => (int) env('GATEWAY_PING_SPREAD', 300),
+        /* Tur aralığı (dakika) ve gateway başına ping adedi; panelden de ayarlanır (config/settings.php). */
+        'interval_minutes' => (int) env('GATEWAY_PING_INTERVAL_MINUTES', 10),
+        'count' => (int) env('GATEWAY_PING_COUNT', 5),
+        /* Aynı anda pinglenen gateway sayısı: tur bu boyda paketlere bölünür. */
+        'concurrency' => (int) env('GATEWAY_PING_CONCURRENCY', 20),
     ],
 
 ];

@@ -43,7 +43,7 @@ class GatewayPingController extends Controller implements HasMiddleware
                 : back()->with('error', $message);
         }
 
-        PingGatewayJob::dispatch($ipAddress->getKey(), $gateway);
+        PingGatewayJob::dispatch([['id' => $ipAddress->getKey(), 'gateway' => $gateway]])->onQueue(PingGatewayJob::NOW);
         $this->ping->scheduleNextRound();
         $message = "{$gateway} için ping kuyruğa alındı; sonuç birkaç saniye içinde noktada görünür.";
 

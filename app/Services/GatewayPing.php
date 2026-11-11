@@ -8,6 +8,7 @@ use App\Jobs\GatewayPingRoundJob;
 use App\Jobs\PingGatewayJob;
 use App\Models\IpAddress;
 use App\Support\Net\Cidr;
+use Illuminate\Process\Pool;
 use Illuminate\Support\Facades\Process;
 
 /**
@@ -18,9 +19,12 @@ use Illuminate\Support\Facades\Process;
  * boş alana ping atılmaz. Yanıt veren gateway'in kaydı "kullanılıyor"
  * sayılır (bkz. Ipv4BlockPlan).
  *
- * Pingler KUYRUKTAN gider, hepsi bir anda değil: tur her hedef için bir iş
- * atar, işler `spread` saniyeye eşit aralıkla yayılır; kuyruk işçisi tek
- * olduğundan aynı anda tek ping çıkar (bkz. GatewayPingRoundJob).
+ * Pingler KUYRUKTAN gider: tur hedefleri `concurrency`'lik paketlere böler,
+ * her paket bir iştir ve paketteki gateway'ler AYNI ANDA pinglenir (ayrı
+ * süreçler); paketler sırayla işlenir (bkz. GatewayPingRoundJob). Gateway
+ * başına `count` ping saniyede bir gider; biri yanıt alırsa gateway yanıt
+ * veriyor sayılır. ↻ ayrı, önce işlenen kuyruktadır (PingGatewayJob::NOW):
+ * en çok bir paket bekler.
  *
  * Komut kabuktan geçmez (dizi); adres ip2long/long2ip'ten gelir. Sonuç kayda
  * sessizce yazılır: updated_at değişmez, etkinlik kaydı düşmez.
@@ -65,7 +69,7 @@ class GatewayPing
     }
 
     /**
-     * Bir tur: hedefleri yayarak kuyruğa atar. Artık hedef olmayan kaydın
+     * Bir tur: hedefleri paketler hâlinde kuyruğa atar. Artık hedef olmayan kaydın
      * (ör. sonradan bölünen blok) eski sonucu düşer; son yanıt zamanı
      * (gateway_seen_at) korunur.
      *
@@ -79,31 +83,61 @@ class GatewayPing
             ->whereKeyNot(array_map(fn (array $t): int => $t['record']->getKey(), $targets))
             ->toBase()->update(['gateway_up' => null, 'gateway_checked_at' => null]);
 
-        $gap = intdiv(max(0, (int) config('ip.gateway_ping.spread')) * 1000, max(1, count($targets)));
+        $jobs = array_map(fn (array $t): array => ['id' => $t['record']->getKey(), 'gateway' => $t['gateway']], $targets);
 
-        foreach ($targets as $i => $target) {
-            PingGatewayJob::dispatch($target['record']->getKey(), $target['gateway'])
-                ->delay(now()->addMilliseconds($i * $gap));
+        foreach (array_chunk($jobs, $this->concurrency()) as $batch) {
+            PingGatewayJob::dispatch($batch);
         }
 
         return count($targets);
     }
 
-    /** Sonraki tur; bekleyen tur varsa kuyruğa ikincisi girmez. */
+    /**
+     * Sonraki tur; bekleyen tur varsa kuyruğa ikincisi girmez. Vakti gelen
+     * tur kuyruğun sonuna girer: önceki turun pingleri bitmeden başlamaz.
+     */
     public function scheduleNextRound(): void
     {
-        GatewayPingRoundJob::dispatch()->delay(now()->addSeconds((int) config('ip.gateway_ping.interval')));
+        GatewayPingRoundJob::dispatch()->delay(now()->addSeconds(self::intervalSeconds()));
     }
 
-    /** Tek ping; sonuç kayda yazılır. Kayıt arada silindiyse yazılacak satır yoktur. */
+    /** Tur aralığı; ayar boş ya da sıfırsa bir dakika. */
+    public static function intervalSeconds(): int
+    {
+        return max(1, (int) config('ip.gateway_ping.interval_minutes')) * 60;
+    }
+
+    /** Tek gateway'in kontrolü (bkz. checkMany). */
     public function check(int $recordId, string $gateway): bool
     {
-        $up = Process::timeout($this->timeout() + 5)->run($this->command($gateway))->successful();
-        $now = now();
+        return $this->checkMany([['id' => $recordId, 'gateway' => $gateway]])[$recordId];
+    }
 
-        IpAddress::query()->whereKey($recordId)->toBase()->update($up
-            ? ['gateway_up' => true, 'gateway_checked_at' => $now, 'gateway_seen_at' => $now]
-            : ['gateway_up' => false, 'gateway_checked_at' => $now]);
+    /**
+     * Paketteki gateway'ler aynı anda pinglenir; sonuçlar kayda yazılır.
+     * Kayıt arada silindiyse yazılacak satır yoktur.
+     *
+     * @param  list<array{id: int, gateway: string}>  $targets
+     * @return array<int, bool> kayıt kimliği => yanıt verdi mi
+     */
+    public function checkMany(array $targets): array
+    {
+        $results = Process::pool(function (Pool $pool) use ($targets): void {
+            foreach ($targets as $target) {
+                $pool->timeout($this->count() + $this->timeout() + 5)->command($this->command($target['gateway']));
+            }
+        })->start()->wait();
+
+        $now = now();
+        $up = [];
+
+        foreach ($targets as $i => $target) {
+            $up[$target['id']] = $results[$i]->successful();
+
+            IpAddress::query()->whereKey($target['id'])->toBase()->update($up[$target['id']]
+                ? ['gateway_up' => true, 'gateway_checked_at' => $now, 'gateway_seen_at' => $now]
+                : ['gateway_up' => false, 'gateway_checked_at' => $now]);
+        }
 
         return $up;
     }
@@ -111,7 +145,20 @@ class GatewayPing
     /** @return list<string> */
     private function command(string $gateway): array
     {
-        return [(string) config('ip.gateway_ping.binary'), '-n', '-c', '1', '-W', (string) $this->timeout(), $gateway];
+        /* -w: ping kendi süresini aşmaz; süreç zaman aşımına kalmadan biter. */
+        return [(string) config('ip.gateway_ping.binary'), '-n', '-c', (string) $this->count(), '-i', '1',
+            '-W', (string) $this->timeout(), '-w', (string) ($this->count() + $this->timeout()), $gateway];
+    }
+
+    /** Aynı anda pinglenen gateway sayısı (paket boyu). */
+    private function concurrency(): int
+    {
+        return min(50, max(1, (int) config('ip.gateway_ping.concurrency')));
+    }
+
+    private function count(): int
+    {
+        return min(10, max(1, (int) config('ip.gateway_ping.count')));
     }
 
     private function timeout(): int

@@ -12,7 +12,7 @@ use Illuminate\Foundation\Queue\Queueable;
 /**
  * Gateway ping turu: zamanlayıcı yok, tur kendini kurar. Her tur bütün
  * hedefleri yayarak kuyruğa atar (bkz. GatewayPing::round) ve bir sonraki
- * turu config('ip.gateway_ping.interval') sonrasına koyar.
+ * turu tur aralığı sonrasına koyar (bkz. GatewayPing::intervalSeconds).
  *
  * Kuyrukta bekleyen tek tur olur: kilit iş başlayınca bırakılır ki tur
  * kendini yeniden kurabilsin; açılışta ya da ↻ ile kurulmak istenen ikinci
@@ -29,7 +29,7 @@ class GatewayPingRoundJob implements ShouldBeUniqueUntilProcessing, ShouldQueue
     /** Kilit bekleyen turdan uzun yaşar; redis giderse kilit de gider, tur yeniden kurulabilir. */
     public function uniqueFor(): int
     {
-        return (int) config('ip.gateway_ping.interval') + 300;
+        return GatewayPing::intervalSeconds() + 300;
     }
 
     public function handle(GatewayPing $ping): void

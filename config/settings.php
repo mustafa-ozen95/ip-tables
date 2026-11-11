@@ -68,6 +68,42 @@ return [
         ],
 
         /*
+         * Gateway ping turu (bkz. GatewayPing). Kuyruk işçisi ayarları her
+         * işten önce yeniden okur; değişiklik bir sonraki turda geçerlidir.
+         */
+        'ping' => [
+            'label' => 'Gateway ping',
+            'description' => 'Blokların gateway\'lerine düzenli ping. Tur gateway\'leri paketlere böler; '
+                .'paketteki gateway\'ler aynı anda, paketler sırayla pinglenir.',
+            'settings' => [
+
+                'ip.gateway_ping.interval_minutes' => [
+                    'label' => 'Tur aralığı',
+                    'hint' => 'Her gateway bu sürede bir kez kontrol edilir.',
+                    'type' => 'int',
+                    'unit' => 'dakika',
+                    'rules' => ['integer', 'min:1', 'max:1440'],
+                ],
+
+                'ip.gateway_ping.count' => [
+                    'label' => 'Ping adedi',
+                    'hint' => 'Kontrolde gateway başına saniyede bir gönderilir; biri yanıt alırsa gateway yanıt veriyor sayılır.',
+                    'type' => 'int',
+                    'unit' => 'ping',
+                    'rules' => ['integer', 'min:1', 'max:10'],
+                ],
+
+                'ip.gateway_ping.concurrency' => [
+                    'label' => 'Aynı anda pinglenen gateway',
+                    'hint' => 'Tur gateway\'leri bu boyda paketlere böler; bir paket ping adedi kadar saniye sürer.',
+                    'type' => 'int',
+                    'unit' => 'gateway',
+                    'rules' => ['integer', 'min:1', 'max:50'],
+                ],
+            ],
+        ],
+
+        /*
          * Merkez ile giriş.
          *
          * Açıldığında giriş ekranı merkezi ÖNE alır ve parola formunu

@@ -10,10 +10,12 @@ use App\Jobs\GatewayPingRoundJob;
 use App\Jobs\PingGatewayJob;
 use App\Models\AddressGroup;
 use App\Models\IpAddress;
+use App\Models\Role;
 use App\Models\User;
 use App\Models\UserPermission;
 use App\Policies\IpAddressPolicy;
 use App\Services\GatewayPing;
+use App\Services\Settings\SettingsRepository;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Process\PendingProcess;
@@ -136,7 +138,7 @@ class GatewayPingTest extends TestCase
         Process::assertNothingRan();
     }
 
-    /** Komut kabuktan geçmez: dizi, adres son öğe. */
+    /** Komut kabuktan geçmez: dizi, adres son öğe. Varsayılan 5 ping, saniyede bir; adet ayardan. */
     #[Test]
     public function komut_dizi_olarak_calisir(): void
     {
@@ -144,17 +146,46 @@ class GatewayPingTest extends TestCase
         Process::fake();
 
         app(GatewayPing::class)->check(1, '198.51.100.1');
+        config(['ip.gateway_ping.count' => 3]);
+        app(GatewayPing::class)->check(1, '198.51.100.1');
 
-        Process::assertRan(fn (PendingProcess $islem): bool => $islem->command === ['ping', '-n', '-c', '1', '-W', '1', '198.51.100.1']);
+        Process::assertRan(fn (PendingProcess $islem): bool => $islem->command === ['ping', '-n', '-c', '5', '-i', '1', '-W', '1', '-w', '6', '198.51.100.1']);
+        Process::assertRan(fn (PendingProcess $islem): bool => $islem->command === ['ping', '-n', '-c', '3', '-i', '1', '-W', '1', '-w', '4', '198.51.100.1']);
     }
 
-    /** Tur pingleri spread'e eşit aralıkla yayar, sonraki turu interval sonrasına kurar; zamanlayıcıda değildir. */
+    /** Tur aralığı ve ping adedi Ayarlar'dan değişir; sınır dışı değer kabul edilmez. */
+    #[Test]
+    public function aralik_ve_adet_ayarlardan_degisir(): void
+    {
+        $rol = Role::query()->where('is_admin', true)->first()
+            ?? Role::create(['slug' => 'admin', 'label' => 'Yönetici', 'badge' => 'gray', 'is_admin' => true]);
+        $yonetici = User::factory()->create(['role_id' => $rol->getKey()]);
+
+        $this->actingAs($yonetici)->get(route('settings.index', ['grup' => 'ping']))
+            ->assertOk()->assertSee('Gateway ping')->assertSee('Tur aralığı')->assertSee('Ping adedi')->assertSee('Aynı anda pinglenen gateway');
+
+        $this->actingAs($yonetici)->put(route('settings.update'), [
+            'group' => 'ping', 'ip__gateway_ping__interval_minutes' => 30, 'ip__gateway_ping__count' => 3,
+            'ip__gateway_ping__concurrency' => 10,
+        ])->assertSessionHasNoErrors();
+
+        app(SettingsRepository::class)->apply();
+        $this->assertSame([1800, 3, 10], [GatewayPing::intervalSeconds(), config('ip.gateway_ping.count'), config('ip.gateway_ping.concurrency')]);
+
+        $this->actingAs($yonetici)->put(route('settings.update'), [
+            'group' => 'ping', 'ip__gateway_ping__interval_minutes' => 30, 'ip__gateway_ping__count' => 50,
+            'ip__gateway_ping__concurrency' => 10,
+        ])
+            ->assertSessionHasErrors();
+    }
+
+    /** Tur hedefleri paketlere bölüp hemen kuyruğa atar, sonraki turu aralık sonrasına kurar; zamanlayıcıda değildir. */
     #[Test]
     public function tur_kuyrukta_yayilir_ve_kendini_kurar(): void
     {
         Queue::fake();
         $this->freezeTime();
-        config(['ip.gateway_ping.spread' => 300, 'ip.gateway_ping.interval' => 600]);
+        config(['ip.gateway_ping.interval_minutes' => 10, 'ip.gateway_ping.concurrency' => 2]);
         $this->adres('192.0.2.0/24');
         $this->adres('198.51.100.0/24');
         $this->adres('203.0.113.0/24');
@@ -162,15 +193,17 @@ class GatewayPingTest extends TestCase
         $this->artisan('gateways:ping')->expectsOutputToContain('3 gateway için ping kuyruğa alındı')->assertSuccessful();
 
         $gecikme = fn ($is): int => (int) now()->diffInSeconds($is->delay);
-        $pingler = Queue::pushed(PingGatewayJob::class)->mapWithKeys(fn (PingGatewayJob $is): array => [$is->gateway => $gecikme($is)]);
-        $this->assertSame(['192.0.2.1' => 0, '198.51.100.1' => 100, '203.0.113.1' => 200], $pingler->all());
+        /* İkişerlik paket: ilk ikisi aynı anda, üçüncüsü sonraki pakette; gecikme yok. */
+        $paketler = Queue::pushed(PingGatewayJob::class)->map(fn (PingGatewayJob $is): array => array_column($is->targets, 'gateway'));
+        $this->assertSame([['192.0.2.1', '198.51.100.1'], ['203.0.113.1']], $paketler->values()->all());
+        Queue::assertNotPushed(PingGatewayJob::class, fn (PingGatewayJob $is): bool => $is->queue !== null || $is->delay !== null);
 
         Queue::assertPushed(GatewayPingRoundJob::class, 1);
         $this->assertSame(600, $gecikme(Queue::pushed(GatewayPingRoundJob::class)->first()));
 
-        /* Tur çalışınca yine üç ping, yine bir sonraki tur. */
+        /* Tur çalışınca yine iki paket, yine bir sonraki tur. */
         (new GatewayPingRoundJob)->handle(app(GatewayPing::class));
-        Queue::assertPushed(PingGatewayJob::class, 6);
+        Queue::assertPushed(PingGatewayJob::class, 4);
 
         $this->assertFalse(collect(app(Schedule::class)->events())
             ->contains(fn ($e): bool => str_contains((string) $e->command, 'gateways:ping')));
@@ -219,7 +252,9 @@ class GatewayPingTest extends TestCase
         $this->actingAs($pingci)->post(route('ip-addresses.ping', $blok))
             ->assertSessionHas('status', '198.51.100.1 için ping kuyruğa alındı; sonuç birkaç saniye içinde noktada görünür.');
 
-        Queue::assertPushed(PingGatewayJob::class, fn (PingGatewayJob $is): bool => $is->recordId === $blok->id && $is->gateway === '198.51.100.1');
+        Queue::assertPushed(PingGatewayJob::class, fn (PingGatewayJob $is): bool => $is->targets === [['id' => $blok->id, 'gateway' => '198.51.100.1']]
+            /* ↻ turun arkasında beklemez: işçinin önce işlediği kuyrukta. */
+            && $is->queue === PingGatewayJob::NOW);
     }
 
     /** Betik: JSON ile atar, sonucu ayrı uçtan bekler; o uç da "ping" yetkisi ister. */
