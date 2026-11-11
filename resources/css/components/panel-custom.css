@@ -146,3 +146,12 @@
 @media (prefers-reduced-motion: reduce) {
     .ping-dot .dot { animation: none; }
 }
+
+/*
+ * ŞİMDİ KONTROL ET (↻): ping noktasının yanındaki form. Bloğun katlanır
+ * satırında da durur; satır içinde akması için satır içi kutudur.
+ */
+.ping-now {
+    display: inline-flex;
+    margin-left: var(--space-1);
+}

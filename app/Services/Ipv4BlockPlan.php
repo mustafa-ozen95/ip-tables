@@ -126,6 +126,7 @@ class Ipv4BlockPlan
             ...($parts === [] && $block['record']->gateway_up
                 ? ['state' => 'full', 'stateLabel' => 'Kullanılıyor', 'badge' => BadgeVariant::Red]
                 : $this->state($used, 256)),
+            'pingable' => $parts === [],
             'ping' => $parts === [] ? $this->ping->of($block['record']) : null,
             'open' => ($openBlock !== null && $block['record']->uuid === $openBlock)
                 || ($selected !== null && in_array($selected, array_map(fn (array $p): string => (string) $p['record']->uuid, $parts), true)),
@@ -152,6 +153,7 @@ class Ipv4BlockPlan
             'first' => $hosts ? long2ip(ip2long($cidr->firstUsable()) + 1) : $cidr->firstUsable(),
             'last' => $cidr->lastUsable(),
             'mask' => $cidr->netmask(),
+            'pingable' => $hosts,
             'ping' => $this->ping->of($record),
             ...match (true) {
                 filled($record->name) => ['stateLabel' => 'Dolu', 'badge' => BadgeVariant::Red],
@@ -182,6 +184,7 @@ class Ipv4BlockPlan
             'first' => long2ip($blockStart + $free['start']),
             'last' => long2ip($blockStart + $free['end']),
             'mask' => null,
+            'pingable' => false,
             'ping' => null,
             'name' => ($free['end'] - $free['start'] + 1).' adres',
             'stateLabel' => 'Bölünmemiş',

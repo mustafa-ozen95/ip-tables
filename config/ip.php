@@ -19,19 +19,21 @@ return [
         .'192.168.0.0/16,::/128,::1/128,fc00::/7,fe80::/10'))))),
 
     /*
-    | Gateway ping (bkz. App\Services\GatewayPing). Zamanlayıcı on dakikada
-    | bir blokların gateway'lerine birer ping atar: bölünmüş blokta her
-    | parçanın gateway'i, bölünmemiş /24'te .1. Yanıt veren "kullanılıyor"
-    | sayılır. Ping konteynerden çıkar; ağlara oradan ulaşılabilmelidir.
+    | Gateway ping (bkz. App\Services\GatewayPing). Kuyruktaki tur her
+    | `interval` saniyede blokların gateway'lerine birer ping atar: bölünmüş
+    | blokta her parçanın gateway'i, bölünmemiş /24'te .1. Pingler bir anda
+    | değil, `spread` saniyeye yayılarak tek tek çıkar. Yanıt veren
+    | "kullanılıyor" sayılır. Ping konteynerden çıkar; ağlara oradan
+    | ulaşılabilmelidir.
     |
-    | timeout: bir pingin yanıt bekleme süresi (saniye). concurrency: aynı
-    | anda en çok kaç ping.
+    | timeout: bir pingin yanıt bekleme süresi (saniye).
     */
     'gateway_ping' => [
         'enabled' => (bool) env('GATEWAY_PING_ENABLED', true),
         'binary' => env('GATEWAY_PING_BINARY', 'ping'),
         'timeout' => (int) env('GATEWAY_PING_TIMEOUT', 1),
-        'concurrency' => (int) env('GATEWAY_PING_CONCURRENCY', 32),
+        'interval' => (int) env('GATEWAY_PING_INTERVAL', 600),
+        'spread' => (int) env('GATEWAY_PING_SPREAD', 300),
     ],
 
 ];

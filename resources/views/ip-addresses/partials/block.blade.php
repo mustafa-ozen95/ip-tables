@@ -33,8 +33,8 @@
                                 <td class="table__cell--mono" data-label="Ağ">{{ $part['notation'] }}</td>
                                 <td class="table__cell--mono" data-label="Ağ geçidi">
                                     {{ $part['gateway'] ?? '—' }}
-                                    @if ($part['ping'])
-                                        @include('ip-addresses.partials.ping-dot', ['ping' => $part['ping']])
+                                    @if ($part['pingable'])
+                                        @include('ip-addresses.partials.ping-dot', ['ping' => $part['ping'], 'record' => $part['record']])
                                     @endif
                                 </td>
                                 <td class="table__cell--mono" data-label="İlk adres">{{ $part['first'] }}</td>

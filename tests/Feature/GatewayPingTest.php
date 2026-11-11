@@ -6,6 +6,8 @@ namespace Tests\Feature;
 
 use App\Enums\GroupKind;
 use App\Enums\PermissionEffect;
+use App\Jobs\GatewayPingRoundJob;
+use App\Jobs\PingGatewayJob;
 use App\Models\AddressGroup;
 use App\Models\IpAddress;
 use App\Models\User;
@@ -16,6 +18,7 @@ use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Process\PendingProcess;
 use Illuminate\Support\Facades\Process;
+use Illuminate\Support\Facades\Queue;
 use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
 
@@ -24,7 +27,8 @@ use Tests\TestCase;
  * Yanıt veren kullanılıyor sayılır, listede yeşil/kırmızı nokta.
  *
  * Adresler belgeleme aralıklarındandır (RFC 5737 / 3849); ping atılmaz,
- * süreç sahtedir.
+ * süreç sahtedir. Testte kuyruk eşzamanlıdır: ping işleri hemen çalışır;
+ * tur kendini yeniden kurduğu için sahtedir (yoksa sonsuz döner).
  */
 class GatewayPingTest extends TestCase
 {
@@ -37,6 +41,7 @@ class GatewayPingTest extends TestCase
         parent::setUp();
 
         $this->grup = AddressGroup::factory()->create(['name' => 'Grup A', 'kind' => GroupKind::Mixed]);
+        Queue::fake([GatewayPingRoundJob::class]);
     }
 
     private function adres(string $girdi, ?string $ad = null): IpAddress
@@ -138,19 +143,100 @@ class GatewayPingTest extends TestCase
         $this->adres('198.51.100.0/24');
         Process::fake();
 
-        app(GatewayPing::class)->run();
+        app(GatewayPing::class)->check(1, '198.51.100.1');
 
         Process::assertRan(fn (PendingProcess $islem): bool => $islem->command === ['ping', '-n', '-c', '1', '-W', '1', '198.51.100.1']);
     }
 
+    /** Tur pingleri spread'e eşit aralıkla yayar, sonraki turu interval sonrasına kurar; zamanlayıcıda değildir. */
     #[Test]
-    public function on_dakikada_bir_zamanlanir(): void
+    public function tur_kuyrukta_yayilir_ve_kendini_kurar(): void
     {
-        $olay = collect(app(Schedule::class)->events())
-            ->first(fn ($e): bool => str_contains((string) $e->command, 'gateways:ping'));
+        Queue::fake();
+        $this->freezeTime();
+        config(['ip.gateway_ping.spread' => 300, 'ip.gateway_ping.interval' => 600]);
+        $this->adres('192.0.2.0/24');
+        $this->adres('198.51.100.0/24');
+        $this->adres('203.0.113.0/24');
 
-        $this->assertNotNull($olay);
-        $this->assertSame('*/10 * * * *', $olay->expression);
+        $this->artisan('gateways:ping')->expectsOutputToContain('3 gateway için ping kuyruğa alındı')->assertSuccessful();
+
+        $gecikme = fn ($is): int => (int) now()->diffInSeconds($is->delay);
+        $pingler = Queue::pushed(PingGatewayJob::class)->mapWithKeys(fn (PingGatewayJob $is): array => [$is->gateway => $gecikme($is)]);
+        $this->assertSame(['192.0.2.1' => 0, '198.51.100.1' => 100, '203.0.113.1' => 200], $pingler->all());
+
+        Queue::assertPushed(GatewayPingRoundJob::class, 1);
+        $this->assertSame(600, $gecikme(Queue::pushed(GatewayPingRoundJob::class)->first()));
+
+        /* Tur çalışınca yine üç ping, yine bir sonraki tur. */
+        (new GatewayPingRoundJob)->handle(app(GatewayPing::class));
+        Queue::assertPushed(PingGatewayJob::class, 6);
+
+        $this->assertFalse(collect(app(Schedule::class)->events())
+            ->contains(fn ($e): bool => str_contains((string) $e->command, 'gateways:ping')));
+    }
+
+    /** Bekleyen tur varken ikinci tur kuyruğa girmez (açılış, ↻). */
+    #[Test]
+    public function bekleyen_tur_varken_ikincisi_kurulmaz(): void
+    {
+        Queue::fake();
+
+        app(GatewayPing::class)->scheduleNextRound();
+        app(GatewayPing::class)->scheduleNextRound();
+
+        Queue::assertPushed(GatewayPingRoundJob::class, 1);
+    }
+
+    #[Test]
+    public function kapaliysa_tur_kendini_kurmaz(): void
+    {
+        Queue::fake();
+        config(['ip.gateway_ping.enabled' => false]);
+        $this->adres('198.51.100.0/24');
+
+        (new GatewayPingRoundJob)->handle(app(GatewayPing::class));
+
+        Queue::assertNothingPushed();
+    }
+
+    /** ↻: ayrı "ping" yetkisi; gateway'i hemen kuyruğa atar. */
+    #[Test]
+    public function simdi_kontrol_et_ayri_yetki_ister(): void
+    {
+        Queue::fake();
+        $blok = $this->adres('198.51.100.0/24');
+        $izleyici = $this->izleyici();
+        $pingci = $this->izleyici(['ping']);
+
+        $this->actingAs($izleyici)->get(route('ip-addresses.index', ['grup' => $this->grup->uuid]))
+            ->assertOk()->assertDontSee(route('ip-addresses.ping', $blok), false);
+        $this->actingAs($izleyici)->post(route('ip-addresses.ping', $blok))->assertForbidden();
+        Queue::assertNothingPushed();
+
+        $this->actingAs($pingci)->get(route('ip-addresses.index', ['grup' => $this->grup->uuid]))
+            ->assertOk()->assertSee(route('ip-addresses.ping', $blok), false)->assertSee('Şimdi kontrol et');
+        $this->actingAs($pingci)->post(route('ip-addresses.ping', $blok))
+            ->assertSessionHas('status', '198.51.100.1 için ping kuyruğa alındı; sonuç birkaç saniye içinde noktada görünür.');
+
+        Queue::assertPushed(PingGatewayJob::class, fn (PingGatewayJob $is): bool => $is->recordId === $blok->id && $is->gateway === '198.51.100.1');
+    }
+
+    #[Test]
+    public function gatewayi_olmayana_ping_atilmaz(): void
+    {
+        Queue::fake();
+        $this->adres('198.51.100.0/24');
+        $tek = $this->adres('198.51.100.7');
+        $v6 = $this->adres('2001:db8::/64');
+        $pingci = $this->izleyici(['ping']);
+
+        foreach ([$tek, $v6] as $kayit) {
+            $this->actingAs($pingci)->post(route('ip-addresses.ping', $kayit))
+                ->assertSessionHas('error', "{$kayit->notation} için pinglenecek gateway yok.");
+        }
+
+        Queue::assertNotPushed(PingGatewayJob::class);
     }
 
     /** Ping alan adsız parça "Kullanılıyor"; listede yeşil/kırmızı nokta, blok doluluğuna girer. */
@@ -173,16 +259,20 @@ class GatewayPingTest extends TestCase
             ->assertSee('ping-dot', false);
     }
 
-    private function izleyici(): User
+    /** @param  list<string>  $ek  görüntüle dışındaki yetkiler */
+    private function izleyici(array $ek = []): User
     {
         $kullanici = User::factory()->create();
-        UserPermission::create([
-            'user_id' => $kullanici->id,
-            'resource' => IpAddressPolicy::RESOURCE,
-            'resource_id' => $this->grup->id,
-            'action' => 'view',
-            'effect' => PermissionEffect::Allow,
-        ]);
+
+        foreach (['view', ...$ek] as $yetki) {
+            UserPermission::create([
+                'user_id' => $kullanici->id,
+                'resource' => IpAddressPolicy::RESOURCE,
+                'resource_id' => $this->grup->id,
+                'action' => $yetki,
+                'effect' => PermissionEffect::Allow,
+            ]);
+        }
 
         return $kullanici;
     }

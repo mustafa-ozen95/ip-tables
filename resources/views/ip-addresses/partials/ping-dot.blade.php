@@ -1,11 +1,20 @@
 {{--
-    Gateway ping noktası (bkz. GatewayPingStatus): yeşil yanıt veriyor,
-    kırmızı vermiyor; yanıp söner (panel-custom.css, PING NOKTASI). Ayrıntı
-    üzerine gelince ve ekran okuyucuda yazar.
+    Gateway ping noktası (yeşil/kırmızı, yanıp söner) ve ↻ şimdi kontrol et.
+    ↻ yalnız "ping" yetkisi olana çizilir.
 
-    $ping: array{up, variant, label}
+    $ping: GatewayPingStatus::of() ya da null (henüz pinglenmedi)
+    $record: pinglenen kayıt
 --}}
-<span class="status ping-dot" title="{{ $ping['label'] }}">
-    <span class="dot dot--{{ $ping['variant']->value }}" aria-hidden="true"></span>
-    <span class="visually-hidden">{{ $ping['label'] }}</span>
-</span>
+@if ($ping)
+    <span class="status ping-dot" title="{{ $ping['label'] }}">
+        <span class="dot dot--{{ $ping['variant']->value }}" aria-hidden="true"></span>
+        <span class="visually-hidden">{{ $ping['label'] }}</span>
+    </span>
+@endif
+@can('ping', $record)
+    <form method="POST" action="{{ route('ip-addresses.ping', $record) }}" class="ping-now">
+        @csrf
+        <button type="submit" class="btn btn--sm btn--icon btn--ghost" title="Şimdi kontrol et"
+                aria-label="{{ $record->notation }} gateway'ini şimdi kontrol et">↻</button>
+    </form>
+@endcan

@@ -2,8 +2,8 @@
 <span class="address-row__address block-node__address">
     <span @class(['block-node__toggle', 'block-node__toggle--none' => $block['parts'] === []]) aria-hidden="true"></span>
     <span class="mono truncate">{{ $block['notation'] }}</span>
-    @if ($block['ping'])
-        @include('ip-addresses.partials.ping-dot', ['ping' => $block['ping']])
+    @if ($block['pingable'])
+        @include('ip-addresses.partials.ping-dot', ['ping' => $block['ping'], 'record' => $block['record']])
     @endif
 </span>
 

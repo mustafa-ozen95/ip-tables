@@ -12,6 +12,7 @@ use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\CertificateController;
 use App\Http\Controllers\DatabaseController;
 use App\Http\Controllers\ErrorLogController;
+use App\Http\Controllers\GatewayPingController;
 use App\Http\Controllers\IpAddressController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\SettingsController;
@@ -83,6 +84,10 @@ Route::middleware('auth')->group(function (): void {
         Route::post('addresses/{ipAddress}/merge', 'merge')->name('ip-addresses.merge');
         Route::post('addresses/{ipAddress}/subdivide', 'subdivide')->name('ip-addresses.subdivide');
     });
+
+    /* ↻ gateway'i şimdi pingle: dışarıya paket çıkar, sıklığı sınırlı. */
+    Route::post('addresses/{ipAddress}/ping', [GatewayPingController::class, 'store'])
+        ->middleware('throttle:30,1')->name('ip-addresses.ping');
 
     Route::resource('addresses', IpAddressController::class)
         ->only(['index', 'store', 'update', 'destroy'])

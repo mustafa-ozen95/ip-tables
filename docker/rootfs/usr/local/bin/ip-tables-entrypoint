@@ -480,5 +480,11 @@ fi
 bilgi "Önbellekler üretiliyor..."
 gosu ipt "${PHP}" artisan optimize
 
+# Gateway ping turu kuyrukta kendini kurar (GatewayPingRoundJob); redis
+# kalıcı olmadığından açılışta yeniden başlatılır. Bekleyen tur varsa
+# ikincisi kuyruğa girmez. Kurulamazsa panel yine açılır; ↻ turu kurar.
+gosu ipt "${PHP}" artisan gateways:ping \
+    || uyari "Gateway ping turu kurulamadı; sonra 'php artisan gateways:ping' ya da ↻ ile kurulur."
+
 bilgi "Panel hazır."
 exec "$@"

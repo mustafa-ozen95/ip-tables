@@ -49,6 +49,12 @@ class IpAddressPolicy
         return $this->can($user, 'delete', $ipAddress);
     }
 
+    /* Gateway'e elle ping: dışarıya paket çıkar, "görüntüle" kapsamaz. */
+    public function ping(User $user, IpAddress $ipAddress): bool
+    {
+        return $this->can($user, 'ping', $ipAddress);
+    }
+
     private function can(User $user, string $action, IpAddress $ipAddress): bool
     {
         return $this->resolver->allows($user, self::RESOURCE, $action, $ipAddress->address_group_id);

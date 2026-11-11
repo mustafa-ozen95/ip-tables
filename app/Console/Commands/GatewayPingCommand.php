@@ -8,14 +8,15 @@ use App\Services\GatewayPing;
 use Illuminate\Console\Command;
 
 /**
- * Blokların gateway'lerine ping atar, sonucu kayda yazar (bkz. GatewayPing).
- * Zamanlayıcı on dakikada bir çalıştırır; elle de çağrılabilir.
+ * Gateway ping turunu başlatır: bu turu hemen kuyruğa atar, sonrakini kurar
+ * (bkz. GatewayPingRoundJob). Konteyner açılışında çalışır; tur ondan sonra
+ * kendini kurar. Elle de çağrılabilir.
  */
 class GatewayPingCommand extends Command
 {
     protected $signature = 'gateways:ping';
 
-    protected $description = "Blokların gateway'lerine ping atar, yanıt vereni kullanılıyor sayar";
+    protected $description = 'Gateway ping turunu kuyruğa alır (yanıt veren kullanılıyor sayılır)';
 
     public function handle(GatewayPing $ping): int
     {
@@ -25,8 +26,9 @@ class GatewayPingCommand extends Command
             return self::SUCCESS;
         }
 
-        ['up' => $up, 'down' => $down] = $ping->run();
-        $this->info("{$up} gateway yanıt verdi, {$down} vermedi.");
+        $count = $ping->round();
+        $ping->scheduleNextRound();
+        $this->info("{$count} gateway için ping kuyruğa alındı; sonraki tur kuruldu.");
 
         return self::SUCCESS;
     }

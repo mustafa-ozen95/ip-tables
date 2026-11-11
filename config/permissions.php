@@ -21,6 +21,8 @@ return [
         'create' => 'Ekle',
         'update' => 'Düzenle',
         'delete' => 'Sil',
+        // Gateway'e elle ping (↻): dışarıya paket çıkar, ayrı yetkidir.
+        'ping' => 'Ping at',
     ],
 
     /*
@@ -41,7 +43,7 @@ return [
     'templates' => [
         'network' => [
             'address_group' => [
-                'all' => ['view', 'create', 'update', 'delete'],
+                'all' => ['view', 'create', 'update', 'delete', 'ping'],
             ],
         ],
         'teknik' => [
@@ -55,7 +57,7 @@ return [
         'address_group' => [
             'label' => 'Adres grupları',
             'model' => AddressGroup::class,
-            'actions' => ['view', 'create', 'update', 'delete'],
+            'actions' => ['view', 'create', 'update', 'delete', 'ping'],
         ],
     ],
 

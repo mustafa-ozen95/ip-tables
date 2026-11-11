@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Jobs\GatewayPingRoundJob;
+use App\Jobs\PingGatewayJob;
 use App\Models\IpAddress;
 use App\Support\Net\Cidr;
-use Illuminate\Process\Pool;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Process;
 
 /**
@@ -17,6 +17,10 @@ use Illuminate\Support\Facades\Process;
  * adresi + 1; /31 ve /32'de gateway yok), bölünmemiş /24'te .1. Bölünmemiş
  * boş alana ping atılmaz. Yanıt veren gateway'in kaydı "kullanılıyor"
  * sayılır (bkz. Ipv4BlockPlan).
+ *
+ * Pingler KUYRUKTAN gider, hepsi bir anda değil: tur her hedef için bir iş
+ * atar, işler `spread` saniyeye eşit aralıkla yayılır; kuyruk işçisi tek
+ * olduğundan aynı anda tek ping çıkar (bkz. GatewayPingRoundJob).
  *
  * Komut kabuktan geçmez (dizi); adres ip2long/long2ip'ten gelir. Sonuç kayda
  * sessizce yazılır: updated_at değişmez, etkinlik kaydı düşmez.
@@ -48,28 +52,60 @@ class GatewayPing
         return $targets;
     }
 
-    /** @return array{up: int, down: int} */
-    public function run(): array
+    /** Kaydın pinglenen gateway'i; hedef değilse null. */
+    public function gatewayOf(IpAddress $record): ?string
     {
-        $results = [];
-
-        foreach (array_chunk($this->targets(), max(1, (int) config('ip.gateway_ping.concurrency'))) as $chunk) {
-            $pool = Process::pool(function (Pool $pool) use ($chunk): void {
-                foreach ($chunk as $i => $target) {
-                    $pool->as((string) $i)->timeout($this->timeout() + 5)->command($this->command($target['gateway']));
-                }
-            })->start()->wait();
-
-            foreach ($chunk as $i => $target) {
-                $results[$target['record']->getKey()] = $pool[(string) $i]->successful();
+        foreach ($this->targets() as $target) {
+            if ($target['record']->is($record)) {
+                return $target['gateway'];
             }
         }
 
-        $this->store($results);
+        return null;
+    }
 
-        $up = count(array_filter($results));
+    /**
+     * Bir tur: hedefleri yayarak kuyruğa atar. Artık hedef olmayan kaydın
+     * (ör. sonradan bölünen blok) eski sonucu düşer; son yanıt zamanı
+     * (gateway_seen_at) korunur.
+     *
+     * @return int kuyruğa atılan ping sayısı
+     */
+    public function round(): int
+    {
+        $targets = $this->targets();
 
-        return ['up' => $up, 'down' => count($results) - $up];
+        IpAddress::query()->whereNotNull('gateway_checked_at')
+            ->whereKeyNot(array_map(fn (array $t): int => $t['record']->getKey(), $targets))
+            ->toBase()->update(['gateway_up' => null, 'gateway_checked_at' => null]);
+
+        $gap = intdiv(max(0, (int) config('ip.gateway_ping.spread')) * 1000, max(1, count($targets)));
+
+        foreach ($targets as $i => $target) {
+            PingGatewayJob::dispatch($target['record']->getKey(), $target['gateway'])
+                ->delay(now()->addMilliseconds($i * $gap));
+        }
+
+        return count($targets);
+    }
+
+    /** Sonraki tur; bekleyen tur varsa kuyruğa ikincisi girmez. */
+    public function scheduleNextRound(): void
+    {
+        GatewayPingRoundJob::dispatch()->delay(now()->addSeconds((int) config('ip.gateway_ping.interval')));
+    }
+
+    /** Tek ping; sonuç kayda yazılır. Kayıt arada silindiyse yazılacak satır yoktur. */
+    public function check(int $recordId, string $gateway): bool
+    {
+        $up = Process::timeout($this->timeout() + 5)->run($this->command($gateway))->successful();
+        $now = now();
+
+        IpAddress::query()->whereKey($recordId)->toBase()->update($up
+            ? ['gateway_up' => true, 'gateway_checked_at' => $now, 'gateway_seen_at' => $now]
+            : ['gateway_up' => false, 'gateway_checked_at' => $now]);
+
+        return $up;
     }
 
     /** @return list<string> */
@@ -81,35 +117,5 @@ class GatewayPing
     private function timeout(): int
     {
         return max(1, (int) config('ip.gateway_ping.timeout'));
-    }
-
-    /**
-     * Önce bütün sonuçlar düşer, sonra bu turun sonuçları yazılır: artık
-     * hedef olmayan kaydın (ör. sonradan bölünen blok) eski noktası kalmasın.
-     * Son yanıt zamanı (gateway_seen_at) korunur. Tek işlemde: arada boş
-     * ekran görülmez.
-     *
-     * @param  array<int, bool>  $results  kayıt kimliği => yanıt verdi mi
-     */
-    private function store(array $results): void
-    {
-        $now = now();
-        $up = array_keys(array_filter($results));
-        $down = array_keys(array_filter($results, fn (bool $ok): bool => ! $ok));
-
-        DB::transaction(function () use ($now, $up, $down): void {
-            IpAddress::query()->whereNotNull('gateway_checked_at')->toBase()
-                ->update(['gateway_up' => null, 'gateway_checked_at' => null]);
-
-            foreach (array_chunk($up, 500) as $ids) {
-                IpAddress::query()->whereKey($ids)->toBase()
-                    ->update(['gateway_up' => true, 'gateway_checked_at' => $now, 'gateway_seen_at' => $now]);
-            }
-
-            foreach (array_chunk($down, 500) as $ids) {
-                IpAddress::query()->whereKey($ids)->toBase()
-                    ->update(['gateway_up' => false, 'gateway_checked_at' => $now]);
-            }
-        });
     }
 }
