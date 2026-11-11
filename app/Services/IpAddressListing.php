@@ -215,7 +215,12 @@ class IpAddressListing
     private function tabled(Collection $rows, bool $headed = true, ?string $selected = null): array
     {
         [$ipv6, $rest] = $rows->partition($this->isIpv6(...));
-        $bySub = $headed ? $ipv6->groupBy(fn (IpAddress $r): string => (string) $r->sub_group_id) : collect([$ipv6]);
+        /* Boş tablo da bir giriştir; sayılsaydı IPv6'sız "Alt grupsuz" bölümü boş başlıkla çıkardı. */
+        $bySub = match (true) {
+            $ipv6->isEmpty() => collect(),
+            $headed => $ipv6->groupBy(fn (IpAddress $r): string => (string) $r->sub_group_id),
+            default => collect([$ipv6]),
+        };
 
         return ['rows' => $rest->values(), 'table' => $bySub->map(fn (Collection $records): array => [
             'heading' => $headed ? $this->ipv6Heading($records, $selected) : null,

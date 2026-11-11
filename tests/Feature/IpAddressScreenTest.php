@@ -561,4 +561,19 @@ class IpAddressScreenTest extends TestCase
             ->assertOk()
             ->assertSeeInOrder(['Grup V6', '%75 boşta', '4'], false);
     }
+
+    /** Bütün IPv6 kayıtları alt grupta: boş "Alt grupsuz" bölümü çizilmez. */
+    #[Test]
+    public function ipv6_alt_grupsuz_kayit_yoksa_bolumu_cikmaz(): void
+    {
+        $grup = $this->grup('Grup V6', GroupKind::Ipv6);
+        $alt = SubGroup::factory()->for($grup, 'group')->create(['name' => '2001:db8::/48', 'position' => 1]);
+        IpAddress::factory()->for($grup, 'group')->for($alt, 'subGroup')->address('2001:db8:0:1::/64')->create();
+
+        $this->actingAs(User::factory()->admin()->create())
+            ->get(route('ip-addresses.index', ['grup' => $grup->uuid]))
+            ->assertOk()
+            ->assertSee('2001:db8::/48')
+            ->assertDontSee('Alt grupsuz');
+    }
 }

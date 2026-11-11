@@ -326,6 +326,28 @@
 }
 
 /*
+ * GRUP LİSTESİNDE HİZA: ortak row-item__meta tek parça sağa yaslıdır;
+ * sayıların boyu farklı ("852", "54") olunca "%X boşta" satırdan satıra
+ * kayıyordu. Boş pay ve adet sabit genişlikte, sağa yaslı iki sütundur
+ * (yazı tipi eş aralıklı, ch tam bir karakterdir). Genişlikler dar sütunda
+ * "Public IPv4" kırpılmasın diye en kısadır: "%96 boşta" 9, adet 3 hane.
+ */
+.group-meta {
+    display: inline-flex;
+    gap: 0.5ch;
+}
+
+.group-meta__free {
+    min-width: 9ch;
+    text-align: right;
+}
+
+.group-meta__count {
+    min-width: 3ch;
+    text-align: right;
+}
+
+/*
  * TELEFONDA YAZISIZ PENCERE ORTADA: ortak modal.css telefonda pencereyi
  * klavye yazı alanını örtmesin diye üstten açar. Bu panelde işlemler (⋮),
  * Böl ve bilgi pencereleri çok açılır ve yazı alanı yoktur; onlar ortada

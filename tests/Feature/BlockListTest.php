@@ -371,7 +371,8 @@ class BlockListTest extends TestCase
         $parca->update(['description' => 'uzun bir açıklama metni sonuna kadar okunur']);
 
         $this->liste($this->kullanici())
-            ->assertSee('<span class="free-share--free">%50 boşta</span> · 4', false)
+            ->assertSee('<span class="group-meta__free"><span class="free-share--free">%50 boşta</span>', false)
+            ->assertSee('<span aria-hidden="true">·</span><span class="group-meta__count">4</span>', false)
             ->assertSee('<div class="text-sm text-muted part-note">uzun bir açıklama metni sonuna kadar okunur</div>', false)
             ->assertDontSee('address-row__description text-sm text-muted truncate', false);
     }
@@ -383,7 +384,8 @@ class BlockListTest extends TestCase
         $this->adres('192.0.2.0/24', 'dolu-blok');
 
         $this->liste($this->kullanici())
-            ->assertSee('<span class="free-share--full">Dolu</span> · 1', false)
+            ->assertSee('<span class="group-meta__free"><span class="free-share--full">Dolu</span>', false)
+            ->assertSee('<span class="group-meta__count">1</span>', false)
             ->assertDontSee('%0 boşta');
     }
 
