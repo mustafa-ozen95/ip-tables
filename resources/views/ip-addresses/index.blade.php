@@ -69,7 +69,8 @@
                     <span class="address-row__name">Ad</span>
                     <span class="address-row__type">
                         Durum
-                        <a href="{{ $sort['url'] }}" @class(['sort-toggle', 'sort-toggle--active' => $sort['active']])
+                        {{-- Sıralama yerinde çizilir: açık bölüm/blok ve kaydırma korunur (bkz. navigation.js). --}}
+                        <a href="{{ $sort['url'] }}" @class(['sort-toggle', 'sort-toggle--active' => $sort['active']]) data-in-place
                            title="{{ $sort['label'] }}" aria-label="{{ $sort['label'] }}">{{ $sort['icon'] }}</a>
                     </span>
                     <span class="address-row__description">Açıklama</span>

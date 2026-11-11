@@ -321,6 +321,16 @@ class BlockListTest extends TestCase
             ->assertDontSee('Tür');
     }
 
+    /** Sıralama yeni sayfa gibi çizilmez: açık bölüm/blok kapanmaz (bkz. navigation.js data-in-place). */
+    #[Test]
+    public function siralama_baglantisi_yerinde_cizilir(): void
+    {
+        $this->adres('192.0.2.0/24');
+
+        $this->liste($this->kullanici())
+            ->assertSee('class="sort-toggle" data-in-place', false);
+    }
+
     /** Durum başlığındaki ikon: adres sırası → boşlar önce → dolular önce → adres sırası. */
     #[Test]
     public function bloklar_bos_dolu_durumuna_gore_siralanir(): void

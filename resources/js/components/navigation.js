@@ -333,7 +333,13 @@ export function init() {
         }
 
         event.preventDefault();
-        goTo(link.href);
+
+        /*
+         * data-in-place: aynı listenin başka görünümü (ör. Durum sıralaması).
+         * Yeni sayfa gibi çizilseydi açık bölüm ve bloklar kapanır, sayfa
+         * başa kayardı; yerinde çizimde ikisi de korunur, adres güncellenir.
+         */
+        goTo(link.href, link.dataset.inPlace === undefined ? 'push' : 'replace');
     });
 
     /* Arama ve süzgeç de birer sayfa geçişidir. */
