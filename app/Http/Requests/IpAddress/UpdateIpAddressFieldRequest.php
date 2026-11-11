@@ -19,7 +19,7 @@ class UpdateIpAddressFieldRequest extends FormRequest
 
     public function authorize(): bool
     {
-        return $this->user()->can('update', $this->route('ipAddress'));
+        return $this->user()->can('updateDetails', $this->route('ipAddress'));
     }
 
     /** @return array<string, array<int, mixed>> */

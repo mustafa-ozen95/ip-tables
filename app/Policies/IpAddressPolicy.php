@@ -44,6 +44,15 @@ class IpAddressPolicy
         return $this->can($user, 'update', $ipAddress);
     }
 
+    /*
+     * Yalnız ad ve açıklama (yerinde düzenleme, bkz. IpAddressFieldController).
+     * "Düzenle" bunu kapsar; tersi değil: adres, grup, vurgu, bölme ister.
+     */
+    public function updateDetails(User $user, IpAddress $ipAddress): bool
+    {
+        return $this->can($user, 'update_details', $ipAddress) || $this->can($user, 'update', $ipAddress);
+    }
+
     public function delete(User $user, IpAddress $ipAddress): bool
     {
         return $this->can($user, 'delete', $ipAddress);

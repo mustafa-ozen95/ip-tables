@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Services;
 
-use App\Enums\Highlight;
 use App\Models\AddressGroup;
 use App\Models\IpAddress;
 use App\Models\SubGroup;
@@ -31,6 +30,9 @@ use Illuminate\Http\Request;
  */
 class IpAddressListing
 {
+    /** Tek bölüm bu kadar satıra kadar kendiliğinden açık gelir (bkz. sections). */
+    private const OPEN_LIMIT = 150;
+
     public function __construct(
         private UserPermissionResolver $resolver,
         private Ipv4BlockPlan $plan,
@@ -54,13 +56,20 @@ class IpAddressListing
         $window = $this->window($request, $selected);
         $creatable = $this->creatableGroups($user, $groups);
 
+        /* Blok planı bir kez kurulur: kenar çubuğundaki boş pay da liste de ondan okur. */
+        $plan = $this->plan->build(
+            IpAddress::query()->visibleTo($user)->with(['group', 'subGroup'])->ordered()->get(),
+            $request->string('blok')->toString() ?: null,
+            $selected['uuid'] ?? null,
+        );
+
         return [
             'groups' => $groups,
             'allCount' => $groups->sum('ip_addresses_count'),
-            ...$this->freeLabels($user, $groups),
+            ...$this->freeLabels($groups, $plan['blocks']),
             'selectedGroup' => $selectedGroup,
             'query' => $query,
-            'sections' => $this->sections($user, $selectedGroup, $query, $request->string('blok')->toString() ?: null, $selected['uuid'] ?? null, $sort),
+            'sections' => $this->sections($user, $plan, $groups, $selectedGroup, $query, $selected['uuid'] ?? null, $sort, $this->openSections($request)),
             'sort' => $this->sortLink($sort, $selectedGroup, $query),
             'selected' => $selected,
             'window' => $window,
@@ -77,78 +86,128 @@ class IpAddressListing
      * (bkz. Ipv4BlockPlan::freeShare). Yalnız görülebilen kayıtlardan.
      *
      * @param  Collection<int, AddressGroup>  $groups
+     * @param  list<array<string, mixed>>  $blocks  Ipv4BlockPlan::build()['blocks']
      * @return array{groupFree: array<string, array{label: string, full: bool}>, allFree: array{label: string, full: bool}|null} grup uuid'i => boş pay
      */
-    private function freeLabels(User $user, Collection $groups): array
+    private function freeLabels(Collection $groups, array $blocks): array
     {
-        $blocks = collect($this->plan->build(IpAddress::query()->visibleTo($user)->ordered()->get())['blocks']);
         /* Sıralı anahtar sayfaya çıkmaz: grup uuid'ine çevrilir. */
         $uuids = $groups->pluck('uuid', 'id');
 
         return [
-            'groupFree' => $blocks->groupBy(fn (array $b): string => (string) $uuids->get($b['record']->address_group_id))
+            'groupFree' => collect($blocks)->groupBy(fn (array $b): string => (string) $uuids->get($b['record']->address_group_id))
                 ->map(fn ($groupBlocks): ?array => $this->plan->freeShare($groupBlocks))->filter()->all(),
             'allFree' => $this->plan->freeShare($blocks),
         ];
     }
 
     /**
-     * Listedeki bölümler. Grup seçiliyse alt gruplarına göre bölünür; "Hepsi"
-     * tek bölümdür ve satırda grubun adı da yazar. Parça, alt grubu ne olursa
-     * olsun bloğunun altında durur.
+     * Listedeki bölümler. "Hepsi" gruplarına, seçili grup alt gruplarına
+     * göre bölünür; "Hepsi"de satırda grubun adı da yazar. Parça, alt grubu
+     * ne olursa olsun bloğunun altında durur. Arama sonucu ve alt grubu
+     * olmayan grup başlıksız tek bölümdür.
      *
-     * Alt grup bölümü katlanır, kapalı gelir; seçili kayıt ya da açılacak
-     * blok içindeyse açık gelir.
+     * Bölüm katlanır, kapalı gelir; seçili kayıt ya da açılacak blok
+     * içindeyse, açık istenmişse (openSections) ya da tek bölümse açık gelir.
      *
-     * @return array<int, array{title: string|null, highlight?: string|null, summary: string|null, free: array{label: string, full: bool}|null, open: bool, blocks: list<array<string, mixed>>, rows: Collection<int, IpAddress>}>
+     * @param  array{blocks: list<array<string, mixed>>, others: list<IpAddress>}  $plan  bütün görülebilen kayıtların planı
+     * @param  Collection<int, AddressGroup>  $groups
+     * @param  list<string>  $openSections
+     * @return list<array<string, mixed>>
      */
-    private function sections(User $user, ?AddressGroup $group, string $query, ?string $openBlock, ?string $selected, ?string $sort): array
+    private function sections(User $user, array $plan, Collection $groups, ?AddressGroup $group, string $query, ?string $selected, ?string $sort, array $openSections): array
     {
-        $records = IpAddress::query()->visibleTo($user)
-            ->when($group, fn ($q, AddressGroup $g) => $q->whereBelongsTo($g, 'group'))
-            ->search($query)
-            ->with(['group', 'subGroup'])
-            ->ordered()
-            ->get();
-
         if ($query !== '') {
-            return [['title' => null, 'summary' => null, 'free' => null, 'open' => true, 'blocks' => [], 'rows' => $records]];
+            return [$this->flatSection(IpAddress::query()->visibleTo($user)
+                ->when($group, fn ($q, AddressGroup $g) => $q->whereBelongsTo($g, 'group'))
+                ->search($query)->with(['group', 'subGroup'])->ordered()->get())];
         }
 
-        $plan = $this->plan->build($records, $openBlock, $selected);
-        $plan['blocks'] = $this->sortBlocks($plan['blocks'], $sort);
-        $rows = new Collection($plan['others']);
+        $inGroup = fn (IpAddress $r): bool => $group === null || $r->address_group_id === $group->id;
+        $blocks = $this->sortBlocks(array_values(array_filter($plan['blocks'], fn (array $b): bool => $inGroup($b['record']))), $sort);
+        $rows = (new Collection($plan['others']))->filter($inGroup)->values();
 
-        if ($group === null || $group->subGroups->isEmpty()) {
-            return [['title' => null, 'summary' => null, 'free' => null, 'open' => true, 'blocks' => $plan['blocks'], 'rows' => $rows]];
+        if ($group !== null && $group->subGroups->isEmpty()) {
+            return [$this->flatSection($rows, $blocks)];
         }
 
-        $blocksBy = collect($plan['blocks'])->groupBy(fn (array $b): string => (string) $b['record']->sub_group_id);
-        $rowsBy = $rows->groupBy(fn (IpAddress $r): string => (string) $r->sub_group_id);
-        $section = function (string $title, string $key, ?Highlight $highlight = null) use ($blocksBy, $rowsBy, $selected): array {
+        $by = fn (IpAddress $r): string => (string) ($group === null ? $r->address_group_id : $r->sub_group_id);
+        $blocksBy = collect($blocks)->groupBy(fn (array $b): string => $by($b['record']));
+        $rowsBy = $rows->groupBy($by);
+        $heads = $group === null
+            ? $groups->map(fn (AddressGroup $g): array => [$g->name, (string) $g->id, $g->uuid, null])
+            : $group->subGroups->map(fn (SubGroup $s): array => [$s->name, (string) $s->id, $s->uuid, $s->highlight])
+                ->push(['Alt grupsuz', '', 'alt-grupsuz', null]);
+
+        $sections = $heads->map(function (array $head) use ($blocksBy, $rowsBy, $group, $selected, $sort, $openSections): array {
+            [$title, $key, $openKey, $highlight] = $head;
             $blocks = $blocksBy->get($key, collect());
             $rows = $rowsBy->get($key, new Collection);
 
             return [
                 'title' => $title,
+                'key' => $openKey,
+                'url' => route('ip-addresses.index', array_filter(['grup' => $group?->uuid, 'sira' => $sort, 'bolum' => $openKey])),
                 'highlight' => $highlight?->value,
                 'summary' => implode(' · ', array_filter([
                     $blocks->isNotEmpty() ? $blocks->count().' blok' : null,
                     $rows->isNotEmpty() ? $rows->count().' adres' : null,
                 ])),
                 'free' => $this->plan->freeShare($blocks),
-                'open' => $blocks->contains(fn (array $b): bool => $b['open'] || $b['record']->uuid === $selected)
+                'open' => in_array($openKey, $openSections, true)
+                    || $blocks->contains(fn (array $b): bool => $b['open'] || $b['record']->uuid === $selected)
                     || $rows->contains(fn (IpAddress $r): bool => $r->uuid === $selected),
                 'blocks' => $blocks->all(),
                 'rows' => $rows,
             ];
-        };
+        })->filter(fn (array $s): bool => $s['blocks'] !== [] || $s['rows']->isNotEmpty())->values()->all();
 
-        $sections = $group->subGroups->map(fn (SubGroup $sub): array => $section($sub->name, (string) $sub->id, $sub->highlight))->all();
-        $sections[] = $section('Alt grupsuz', '');
+        /*
+         * Tek bölüm kapalı gelseydi her seferinde bir tıklama eklerdi; ama
+         * büyükse (yalnız IPv4'te kayıt varken "Hepsi") yine kapalı gelir.
+         */
+        if (count($sections) === 1 && $this->size($sections[0]) <= self::OPEN_LIMIT) {
+            $sections[0]['open'] = true;
+        }
 
-        return array_values(array_filter($sections, fn (array $s): bool => $s['blocks'] !== [] || $s['rows']->isNotEmpty()))
-            ?: [['title' => null, 'summary' => null, 'free' => null, 'open' => true, 'blocks' => [], 'rows' => new Collection]];
+        return $sections ?: [$this->flatSection(new Collection)];
+    }
+
+    /** @param  array<string, mixed>  $section */
+    private function size(array $section): int
+    {
+        return array_sum(array_map(fn (array $b): int => 1 + count($b['parts']), $section['blocks'])) + $section['rows']->count();
+    }
+
+    /**
+     * Başlıksız, hep açık tek bölüm.
+     *
+     * @param  Collection<int, IpAddress>  $rows
+     * @param  list<array<string, mixed>>  $blocks
+     * @return array<string, mixed>
+     */
+    private function flatSection(Collection $rows, array $blocks = []): array
+    {
+        return ['title' => null, 'summary' => null, 'free' => null, 'open' => true, 'blocks' => $blocks, 'rows' => $rows];
+    }
+
+    /**
+     * Açık gelecek alt grup bölümleri. Kapalı bölümün içi çizilmez, açılınca
+     * yüklenir (bkz. lazy-section.js): IPv4 listesi bütün parçalarıyla 1,5 MB
+     * tutuyor, her geçişte baştan çiziliyordu.
+     *
+     * İki kaynak: bağlantıdaki "bolum" (bölümü yükleyen istek ve betiksiz
+     * "Bölümü göster") ve yerinde yeniden çizimde tarayıcının bildirdiği
+     * açık bölümler (X-Open-Sections, bkz. navigation.js). Değerler yalnız
+     * bölüm anahtarıyla karşılaştırılır.
+     *
+     * @return list<string>
+     */
+    private function openSections(Request $request): array
+    {
+        $keys = array_filter([$request->query('bolum'), $request->header('X-Open-Sections')], 'is_string');
+
+        return array_slice(array_values(array_filter(array_map('trim', explode(',', implode(',', $keys))))), 0, 100);
     }
 
     /**

@@ -5,6 +5,7 @@ import * as dialog from './components/dialog.js';
 import * as gatewayPing from './components/gateway-ping.js';
 import * as inlineEdit from './components/inline-edit.js';
 import * as keyboard from './components/keyboard.js';
+import * as lazySection from './components/lazy-section.js';
 import * as liveSearch from './components/live-search.js';
 import * as conditionalField from './components/conditional-field.js';
 import * as userMenu from './components/user-menu.js';
@@ -56,6 +57,7 @@ document.addEventListener('DOMContentLoaded', () => {
     gatewayPing.init();
     inlineEdit.init();
     keyboard.init();
+    lazySection.init();
     liveSearch.init();
     userMenu.init();
     navigation.init();
@@ -66,3 +68,6 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 document.addEventListener('eys:page', everyRender);
+
+/* Sonradan yüklenen bölümün satırları da odaklanabilir olsun (bkz. lazy-section.js). */
+document.addEventListener('eys:fragment', () => keyboard.prepare());

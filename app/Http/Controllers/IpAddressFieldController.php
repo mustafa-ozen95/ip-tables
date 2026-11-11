@@ -23,7 +23,7 @@ class IpAddressFieldController extends Controller implements HasMiddleware
 
     public static function middleware(): array
     {
-        return [new Middleware('can:update,ipAddress')];
+        return [new Middleware('can:updateDetails,ipAddress')];
     }
 
     public function update(UpdateIpAddressFieldRequest $request, IpAddress $ipAddress): RedirectResponse

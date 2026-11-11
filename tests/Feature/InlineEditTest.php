@@ -136,6 +136,49 @@ class InlineEditTest extends TestCase
             ->assertSee('data-inline-url="'.route('ip-addresses.field', $parca).'"', false);
     }
 
+    /**
+     * NETWORK ROLÜ YALNIZ AD VE AÇIKLAMA DEĞİŞTİRİR: "Ad ve açıklama düzenle"
+     * yerinde düzenlemeyi açar; adres, grup, vurgu (pencere), bölme, silme,
+     * ekleme ve ping "Düzenle"/"Sil"/"Ekle"/"Ping at" ister.
+     */
+    #[Test]
+    public function ad_aciklama_yetkisi_baska_islem_acmaz(): void
+    {
+        $parca = $this->parca();
+        $blok = IpAddress::query()->where('prefix', 24)->firstOrFail();
+        $kullanici = $this->kullanici(['view', 'update_details']);
+
+        $this->actingAs($kullanici)
+            ->patch(route('ip-addresses.field', $parca), ['field' => 'name', 'value' => 'YENI AD'])
+            ->assertSessionHasNoErrors()->assertRedirect();
+        $this->assertSame('YENI AD', $parca->fresh()->name);
+
+        $this->actingAs($kullanici)->get(route('ip-addresses.index', ['grup' => $this->grup->uuid]))
+            ->assertSee('data-inline-edit="name"', false);
+
+        $this->actingAs($kullanici)->put(route('ip-addresses.update', $parca), [
+            'group' => $this->grup->uuid, 'address' => '192.0.2.8/29', 'name' => 'X', 'highlight' => 'red',
+        ])->assertForbidden();
+        $this->actingAs($kullanici)->delete(route('ip-addresses.destroy', $parca))->assertForbidden();
+        $this->actingAs($kullanici)->post(route('ip-addresses.split', $blok), ['prefix' => 29])->assertForbidden();
+        $this->actingAs($kullanici)->post(route('ip-addresses.ping', $parca))->assertForbidden();
+        $this->actingAs($kullanici)->post(route('ip-addresses.store'), [
+            'group' => $this->grup->uuid, 'address' => '198.51.100.0/24',
+        ])->assertForbidden();
+
+        $this->assertSame(['192.0.2.0', 29, 'YENI AD'], [$parca->fresh()->address, $parca->fresh()->prefix, $parca->fresh()->name]);
+        $this->assertSame(2, IpAddress::query()->count());
+    }
+
+    /** Yerleşik roller: Network yalnız görür ve ad/açıklama düzenler; diğerleri yalnız görür. */
+    #[Test]
+    public function yerlesik_rol_sablonlari(): void
+    {
+        $this->assertSame(['view', 'update_details'], config('permissions.templates.network.address_group.all'));
+        $this->assertSame(['view'], config('permissions.templates.teknik.address_group.all'));
+        $this->assertSame(['view'], config('permissions.templates.muhasebe.address_group.all'));
+    }
+
     /** Bölünmemiş /24 satırı da düzenlenir; bölünmüş bloğun başlığı katlanır, düzenlenmez. */
     #[Test]
     public function bolunmemis_blok_satiri_da_duzenlenir(): void

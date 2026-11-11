@@ -66,7 +66,7 @@ return new class extends Migration
             [
                 'slug' => 'network', 'label' => 'Network', 'badge' => BadgeVariant::Blue->value,
                 'is_admin' => false, 'position' => 1,
-                'description' => 'Bütün gruplarda adresleri görür, ekler, düzenler ve siler.',
+                'description' => 'Bütün gruplarda adresleri görür; yalnız ad ve açıklamayı düzenler.',
             ],
             [
                 'slug' => 'teknik', 'label' => 'Teknik', 'badge' => BadgeVariant::Gray->value,
@@ -76,7 +76,7 @@ return new class extends Migration
             [
                 'slug' => 'muhasebe', 'label' => 'Muhasebe', 'badge' => BadgeVariant::Cyan->value,
                 'is_admin' => false, 'position' => 3,
-                'description' => 'Varsayılan yetkisi yoktur; gereken gruplar kişiye özel verilir.',
+                'description' => 'Bütün gruplarda adresleri görür; değiştirmez.',
             ],
         ];
 

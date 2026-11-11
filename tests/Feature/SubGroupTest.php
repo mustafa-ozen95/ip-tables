@@ -82,13 +82,44 @@ class SubGroupTest extends TestCase
     #[Test]
     public function grup_secilince_kayitlar_alt_grup_basliklari_altinda_siralanir(): void
     {
-        [$grup] = $this->yedekleme();
+        [$grup, $bir, $iki] = $this->yedekleme();
 
         $this->actingAs($this->yonetici())
+            ->withHeader('X-Open-Sections', "{$bir->uuid},{$iki->uuid},alt-grupsuz")
             ->get(route('ip-addresses.index', ['grup' => $grup->uuid]))
             ->assertOk()
             /* Önce Yedek 1 (sıra 10), sonra Yedek 2, bölmesiz kayıt en sonda. */
             ->assertSeeInOrder(['Yedek 1', 'Kayit-Bir', 'Yedek 2', 'Kayit-Iki', 'Alt grupsuz', 'Kayit-Ortak']);
+    }
+
+    /**
+     * KAPALI BÖLÜMÜN İÇİ ÇİZİLMEZ: IPv4 listesi bütün parçalarıyla 1,5 MB
+     * tutuyor, her geçişte baştan çiziliyordu. Bölüm açılınca "bolum" ile
+     * yüklenir (bkz. lazy-section.js); yerinde yeniden çizimde tarayıcı açık
+     * bölümleri bildirir (X-Open-Sections), onlar dolu gelir.
+     */
+    #[Test]
+    public function kapali_bolumun_ici_istenince_cizilir(): void
+    {
+        [$grup, $bir, $iki] = $this->yedekleme();
+        $yonetici = $this->yonetici();
+        $liste = route('ip-addresses.index', ['grup' => $grup->uuid]);
+
+        $this->actingAs($yonetici)->get($liste)
+            ->assertSee('Yedek 1')->assertSee('Yedek 2')
+            ->assertDontSee('Kayit-Bir')->assertDontSee('Kayit-Iki')->assertDontSee('Kayit-Ortak')
+            ->assertSee(route('ip-addresses.index', ['grup' => $grup->uuid, 'bolum' => $bir->uuid]))
+            ->assertSee('data-lazy-section', false);
+
+        $this->actingAs($yonetici)->get(route('ip-addresses.index', ['grup' => $grup->uuid, 'bolum' => $bir->uuid]))
+            ->assertSee('Kayit-Bir')->assertDontSee('Kayit-Iki');
+
+        $this->actingAs($yonetici)->withHeader('X-Open-Sections', "{$iki->uuid},alt-grupsuz")->get($liste)
+            ->assertDontSee('Kayit-Bir')->assertSee('Kayit-Iki')->assertSee('Kayit-Ortak');
+
+        /* Bilinmeyen anahtar yok sayılır; sıralı kimlik bölüm anahtarı değildir. */
+        $this->actingAs($yonetici)->withHeader('X-Open-Sections', (string) $bir->getKey())->get($liste)
+            ->assertDontSee('Kayit-Bir');
     }
 
     /**

@@ -20,6 +20,7 @@ return [
         'view' => 'Görüntüle',
         'create' => 'Ekle',
         'update' => 'Düzenle',
+        'update_details' => 'Ad ve açıklama düzenle',
         'delete' => 'Sil',
         // Gateway'e elle ping (↻): dışarıya paket çıkar, ayrı yetkidir.
         'ping' => 'Ping at',
@@ -41,14 +42,22 @@ return [
     /*
     | Yerleşik rollerin şablonu (rol oluşturulurken bir kez yazılır; sonra
     | Roller ekranından değiştirilir).
+    |
+    | Network yalnız adın ve açıklamanın yerinde düzenlenmesini alır; adres,
+    | grup, vurgu, bölme ve silme "Düzenle"/"Sil" ister. Diğerleri görür.
     */
     'templates' => [
         'network' => [
             'address_group' => [
-                'all' => ['view', 'create', 'update', 'delete', 'ping', 'export'],
+                'all' => ['view', 'update_details'],
             ],
         ],
         'teknik' => [
+            'address_group' => [
+                'all' => ['view'],
+            ],
+        ],
+        'muhasebe' => [
             'address_group' => [
                 'all' => ['view'],
             ],
@@ -59,7 +68,7 @@ return [
         'address_group' => [
             'label' => 'Adres grupları',
             'model' => AddressGroup::class,
-            'actions' => ['view', 'create', 'update', 'delete', 'ping', 'export'],
+            'actions' => ['view', 'create', 'update', 'update_details', 'delete', 'ping', 'export'],
         ],
     ],
 

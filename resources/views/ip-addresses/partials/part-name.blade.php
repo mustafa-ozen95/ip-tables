@@ -8,7 +8,7 @@
 
     $record
 --}}
-@can('update', $record)
+@can('updateDetails', $record)
     <td data-label="Ad" data-inline-cell title="Düzenlemek için çift tıklayın">
         <span @include('ip-addresses.partials.inline-edit-attrs', ['field' => 'name', 'value' => $record->name])>@include('ip-addresses.partials.record-name')</span>
         <div class="text-sm text-muted part-note"

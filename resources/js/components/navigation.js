@@ -107,6 +107,22 @@ function openKeys() {
     return $$('details[open][data-open-key]').map((node) => node.dataset.openKey);
 }
 
+/*
+ * Açık alt grup bölümleri isteğe yazılır: sunucu kapalı bölümün içini
+ * çizmez (bkz. lazy-section.js); yerinde yeniden çizimde açık olanlar dolu
+ * gelsin, açılıp yeniden yüklenmesin. Yeni gezinmede gönderilmez.
+ */
+function headersFor(historyMode) {
+    const sections = historyMode === 'push' ? [] : openKeys()
+        .filter((key) => key.startsWith('bolum:'))
+        .map((key) => key.slice('bolum:'.length));
+
+    return {
+        'X-Requested-With': 'fetch',
+        ...(sections.length > 0 ? { 'X-Open-Sections': sections.join(',') } : {}),
+    };
+}
+
 function reopen(keys) {
     const wanted = new Set(keys);
 
@@ -184,7 +200,7 @@ async function goTo(url, historyMode = 'push') {
 
     try {
         const response = await fetch(url, {
-            headers: { 'X-Requested-With': 'fetch' },
+            headers: headersFor(historyMode),
             credentials: 'same-origin',
             signal: req.signal,
         });
@@ -234,7 +250,7 @@ export async function submitForm(form) {
         const response = await fetch(url, {
             method: (form.getAttribute('method') || 'post').toUpperCase(),
             body: new FormData(form),
-            headers: { 'X-Requested-With': 'fetch' },
+            headers: headersFor('replace'),
             credentials: 'same-origin',
         });
 
