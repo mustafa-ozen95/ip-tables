@@ -1,4 +1,4 @@
-{{-- Bloğun satırı: Tür sütununda bloğun doluluğu, açıklamada parça sayısı ve
+{{-- Bloğun satırı: Durum sütununda bloğun doluluğu, açıklamada parça sayısı ve
      kaydın açıklaması; açıklama kırpılmaz, satır uzar. --}}
 <span class="address-row__address block-node__address">
     <span @class(['block-node__toggle', 'block-node__toggle--none' => $block['parts'] === []]) aria-hidden="true"></span>

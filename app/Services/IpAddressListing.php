@@ -228,7 +228,7 @@ class IpAddressListing
     }
 
     /**
-     * Tür sütun başlığındaki sıralama ikonu: tıkladıkça adres sırası →
+     * Durum sütun başlığındaki sıralama ikonu: tıkladıkça adres sırası →
      * boşlar önce → dolular önce → adres sırası. Grup ve arama korunur.
      *
      * @return array{icon: string, label: string, url: string, active: bool}

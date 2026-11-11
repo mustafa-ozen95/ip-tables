@@ -68,7 +68,7 @@
                     <span class="address-row__address">Adres</span>
                     <span class="address-row__name">Ad</span>
                     <span class="address-row__type">
-                        Tür
+                        Durum
                         <a href="{{ $sort['url'] }}" @class(['sort-toggle', 'sort-toggle--active' => $sort['active']])
                            title="{{ $sort['label'] }}" aria-label="{{ $sort['label'] }}">{{ $sort['icon'] }}</a>
                     </span>

@@ -310,7 +310,18 @@ class BlockListTest extends TestCase
             ->assertSee($this->bagla($parca, 'duzenle'));
     }
 
-    /** Tür başlığındaki ikon: adres sırası → boşlar önce → dolular önce → adres sırası. */
+    /** Sütunda doluluk rozeti (Boş, Dolu, %X dolu) durur; başlığı "Durum"dur, "Tür" değil. */
+    #[Test]
+    public function doluluk_sutununun_basligi_durumdur(): void
+    {
+        $this->adres('192.0.2.0/24');
+
+        $this->liste($this->kullanici())
+            ->assertSeeInOrder(['class="address-row__type"', 'Durum'], false)
+            ->assertDontSee('Tür');
+    }
+
+    /** Durum başlığındaki ikon: adres sırası → boşlar önce → dolular önce → adres sırası. */
     #[Test]
     public function bloklar_bos_dolu_durumuna_gore_siralanir(): void
     {
