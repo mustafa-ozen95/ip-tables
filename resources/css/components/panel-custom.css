@@ -156,13 +156,14 @@
     margin-left: var(--space-1);
 }
 
-/* Sonuç beklenirken ↻ döner (aria-busy, bkz. gateway-ping.js). */
+/* Sonuç beklenirken ↻ mavi olur ve döner (aria-busy, bkz. gateway-ping.js). */
 .ping-now__icon {
     display: inline-block;
 }
 
 .ping-now [aria-busy='true'] {
     cursor: progress;
+    color: var(--color-blue-fg);
 }
 
 .ping-now [aria-busy='true'] .ping-now__icon {
