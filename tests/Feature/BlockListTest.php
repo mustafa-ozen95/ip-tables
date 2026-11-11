@@ -228,9 +228,9 @@ class BlockListTest extends TestCase
         $yanit
             ->assertOk()
             ->assertSee('1 parça · 192 adres bölünmemiş')
-            ->assertSeeInOrder(['198.51.100.0/26', '198.51.100.64 – .255', '192 adres', 'Bölünmemiş'])
+            ->assertSeeInOrder(['198.51.100.0/26', '198.51.100.64/26', '64 adres', 'Bölünmemiş', '198.51.100.128/25', '128 adres', 'Bölünmemiş'])
             ->assertSee('198.51.100.0/24 bölünecek')
-            ->assertSee('Boş alan: 198.51.100.64 – .255 (192 adres)')
+            ->assertSee('Boş alan: 198.51.100.64/26 (64 adres), 198.51.100.128/25 (128 adres)')
             ->assertSee('name="ranges[0][prefix]"', false)
             ->assertDontSee('name="ranges[1][prefix]"', false)
             ->assertSee('name="onizle"', false);

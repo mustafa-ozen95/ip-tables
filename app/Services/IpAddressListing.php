@@ -300,8 +300,8 @@ class IpAddressListing
 
         return [
             'free' => implode(', ', array_map(
-                fn (array $f): string => $this->layout->address($network, $f['start']).' – .'.$f['end'].' ('.($f['end'] - $f['start'] + 1).' adres)',
-                $free,
+                fn (array $f): string => $this->layout->address($network, $f['start']).'/'.$f['prefix'].' ('.($f['end'] - $f['start'] + 1).' adres)',
+                array_merge(...array_map($this->layout->cidrs(...), $free)),
             )),
             'row' => $row,
             'prefixes' => $prefixes,

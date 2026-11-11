@@ -89,7 +89,7 @@ class Ipv4BlockPlanTest extends TestCase
     {
         $this->assertSame('192.0.2.0/24', $this->plan('192.0.2.5/24', '192.0.2.8/29')['blocks'][0]['notation']);
         $this->assertSame(
-            ['192.0.2.0 – .7', '192.0.2.8/29', '192.0.2.16 – .255'],
+            ['192.0.2.0/29', '192.0.2.8/29', '192.0.2.16/28', '192.0.2.32/27', '192.0.2.64/26', '192.0.2.128/25'],
             array_column($this->plan('192.0.2.5/24', '192.0.2.8/29')['blocks'][0]['parts'], 'notation'),
         );
     }
@@ -100,10 +100,23 @@ class Ipv4BlockPlanTest extends TestCase
     {
         $blok = $this->plan('192.0.2.0/24', '192.0.2.0/26', '192.0.2.128/26')['blocks'][0];
 
-        $this->assertSame(['192.0.2.0/26', '192.0.2.64 – .127', '192.0.2.128/26', '192.0.2.192 – .255'], array_column($blok['parts'], 'notation'));
+        $this->assertSame(['192.0.2.0/26', '192.0.2.64/26', '192.0.2.128/26', '192.0.2.192/26'], array_column($blok['parts'], 'notation'));
         $this->assertSame([false, true, false, true], array_column($blok['parts'], 'free'));
-        $this->assertSame(['192.0.2.64', '192.0.2.127', 'Bölünmemiş'], [$blok['parts'][1]['first'], $blok['parts'][1]['last'], $blok['parts'][1]['stateLabel']]);
+        $this->assertSame(['192.0.2.64', '192.0.2.127', '255.255.255.192', 'Bölünmemiş'],
+            [$blok['parts'][1]['first'], $blok['parts'][1]['last'], $blok['parts'][1]['mask'], $blok['parts'][1]['stateLabel']]);
         $this->assertSame('2 parça · 128 adres bölünmemiş', $blok['partsLabel']);
+    }
+
+    /** Bölünmemiş alan aralık değil ağ olarak durur; tek ağa sığmayan alan birden çok ağa bölünür. */
+    #[Test]
+    public function bolunmemis_alan_ag_olarak_yazilir(): void
+    {
+        $blok = $this->plan('192.0.2.0/24', '192.0.2.0/25', '192.0.2.128/30', '192.0.2.144/28', '192.0.2.160/27', '192.0.2.192/26')['blocks'][0];
+
+        $bos = array_values(array_filter($blok['parts'], fn (array $p): bool => $p['free']));
+        $this->assertSame(['192.0.2.132/30', '192.0.2.136/29'], array_column($bos, 'notation'));
+        $this->assertSame(['255.255.255.252', '255.255.255.248'], array_column($bos, 'mask'));
+        $this->assertSame('5 parça · 12 adres bölünmemiş', $blok['partsLabel']);
     }
 
     #[Test]

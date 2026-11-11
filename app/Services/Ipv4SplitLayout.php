@@ -105,6 +105,30 @@ class Ipv4SplitLayout
     }
 
     /**
+     * Aralığı kendi sınırında başlayan en büyük ağlara böler: .132–.143 →
+     * .132/30 + .136/29. Bölünmemiş alan aralık değil ağ olarak gösterilir.
+     *
+     * @param  array{start: int, end: int}  $range
+     * @return list<array{start: int, end: int, prefix: int}>
+     */
+    public function cidrs(array $range): array
+    {
+        $pieces = [];
+
+        for ($start = $range['start']; $start <= $range['end']; $start += $size) {
+            $size = $start === 0 ? self::BLOCK_SIZE : $start & -$start;
+
+            while ($start + $size - 1 > $range['end']) {
+                $size = intdiv($size, 2);
+            }
+
+            $pieces[] = ['start' => $start, 'end' => $start + $size - 1, 'prefix' => 32 - (int) log($size, 2)];
+        }
+
+        return $pieces;
+    }
+
+    /**
      * Bölünmemiş alan: dolu aralıkların arasında kalanlar.
      *
      * @param  list<array{start: int, end: int}>  $taken

@@ -108,7 +108,8 @@ class Ipv4BlockPlan
 
         $rows = [
             ...array_map(fn (array $p): array => ['at' => $p['start'], ...$this->part($p['record'])], $parts),
-            ...array_map(fn (array $f): array => ['at' => $block['start'] + $f['start'], ...$this->freeRow($block['start'], $f)], $free),
+            ...array_map(fn (array $f): array => ['at' => $block['start'] + $f['start'], ...$this->freeRow($block['start'], $f)],
+                array_merge(...array_map($this->layout->cidrs(...), $free))),
         ];
         usort($rows, fn (array $a, array $b): int => $a['at'] <=> $b['at']);
 
@@ -182,20 +183,23 @@ class Ipv4BlockPlan
 
     /**
      * Bölünmemiş alan satırı: parça değildir, bağlantısı yok; Böl ile parçalanır.
+     * Her satır tek ağdır (bkz. Ipv4SplitLayout::cidrs).
      *
-     * @param  array{start: int, end: int}  $free
+     * @param  array{start: int, end: int, prefix: int}  $free
      * @return array<string, mixed>
      */
     private function freeRow(int $blockStart, array $free): array
     {
+        $network = long2ip($blockStart + $free['start']);
+
         return [
             'free' => true,
             'record' => null,
-            'notation' => long2ip($blockStart + $free['start']).' – .'.$free['end'],
+            'notation' => "{$network}/{$free['prefix']}",
             'gateway' => null,
-            'first' => long2ip($blockStart + $free['start']),
+            'first' => $network,
             'last' => long2ip($blockStart + $free['end']),
-            'mask' => null,
+            'mask' => Cidr::make($network, $free['prefix'])->netmask(),
             'pingable' => false,
             'ping' => null,
             'name' => ($free['end'] - $free['start'] + 1).' adres',
