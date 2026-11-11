@@ -101,28 +101,36 @@ class IpAddressWriter
     }
 
     /**
-     * Parçayı iki eş parçaya ayırır: kayıt öndeki yarı olur ve adını korur,
-     * arkadaki yarı adsız açılır.
+     * Parçayı eş parçalara böler: kayıt ilk parça olur ve adını korur,
+     * ötekiler adsız açılır. Ping sonucu eski boyundandır, silinir; sonraki
+     * turda yenisi gelir (bkz. GatewayPing).
      *
-     * @param  array{0: ParsedAddress, 1: ParsedAddress}  $halves
+     * @param  list<ParsedAddress>  $pieces  sıralı, en az iki
      */
-    public function halve(IpAddress $part, array $halves): void
+    public function subdivide(IpAddress $part, array $pieces): void
     {
         $part->loadMissing(['group', 'subGroup']);
+        [$first, $last] = [$pieces[0], $pieces[array_key_last($pieces)]];
 
-        DB::transaction(function () use ($part, $halves): void {
+        DB::transaction(function () use ($part, $pieces, $first, $last): void {
             $before = $this->describe($part);
 
-            $part->forceFill(['address' => $halves[0]->address, 'prefix' => $halves[0]->prefix, 'sort_key' => $halves[0]->sortKey])->save();
-
-            $this->fill(new IpAddress, [
-                'group' => $part->group,
-                'subGroup' => $part->subGroup,
-                'parsed' => $halves[1],
-                'details' => ['name' => null, 'description' => null],
+            $part->forceFill([
+                'address' => $first->address, 'prefix' => $first->prefix, 'sort_key' => $first->sortKey,
+                'gateway_up' => null, 'gateway_checked_at' => null,
             ])->save();
 
-            $this->activity->record(ActivityAction::Updated, "Parça ikiye ayrıldı: {$before} → {$halves[0]->notation()} + {$halves[1]->notation()}", $part);
+            foreach (array_slice($pieces, 1) as $piece) {
+                $this->fill(new IpAddress, [
+                    'group' => $part->group,
+                    'subGroup' => $part->subGroup,
+                    'parsed' => $piece,
+                    'details' => ['name' => null, 'description' => null],
+                ])->save();
+            }
+
+            $this->activity->record(ActivityAction::Updated, "Parça bölündü: {$before} → ".count($pieces)." × /{$first->prefix}"
+                ." ({$first->notation()} … {$last->notation()})", $part);
         });
     }
 

@@ -260,48 +260,61 @@ class BlockSplitTest extends TestCase
         $this->assertCount(2, $this->parcalar());
     }
 
-    /** /28 iki sıralı /29 olur: kayıt öndeki yarıdır, adını korur. */
+    /** /28 dört sıralı /30 olur: kayıt ilk parçadır, adını korur; ping sonucu silinir. */
     #[Test]
-    public function parca_ikiye_ayrilir(): void
+    public function parca_secilen_boyda_parcalanir(): void
     {
         $this->bol([[28, '0-255', 16]])->assertSessionHasNoErrors();
         $parca = $this->parca('198.51.100.16/28');
-        $parca->update(['name' => 'musteri-y']);
+        $parca->forceFill(['name' => 'musteri-y', 'gateway_up' => true, 'gateway_checked_at' => now()])->save();
 
         $this->actingAs($this->bolen())
-            ->post(route('ip-addresses.halve', $parca))
-            ->assertRedirect(route('ip-addresses.index', ['grup' => $this->grup->uuid, 'kayit' => $parca->uuid, 'blok' => $this->blok->uuid]));
+            ->post(route('ip-addresses.subdivide', $parca), ['prefix' => 30])
+            ->assertRedirect(route('ip-addresses.index', ['grup' => $this->grup->uuid, 'kayit' => $parca->uuid, 'blok' => $this->blok->uuid]))
+            ->assertSessionHas('status', 'Parça 4 × /30 olarak bölündü.');
 
-        $this->assertSame(['198.51.100.0/28', '198.51.100.16/29', '198.51.100.24/29', '198.51.100.32/28'], array_slice($this->parcalar(), 0, 4));
-        $this->assertSame(['198.51.100.16', 29, 'musteri-y'], [$parca->fresh()->address, $parca->fresh()->prefix, $parca->fresh()->name]);
-        $this->assertNull($this->parca('198.51.100.24/29')->name);
-        $this->assertDatabaseHas('activity_logs', ['summary' => 'Parça ikiye ayrıldı: Grup A · 198.51.100.16/28 (musteri-y) → 198.51.100.16/29 + 198.51.100.24/29']);
+        $this->assertSame(['198.51.100.0/28', '198.51.100.16/30', '198.51.100.20/30', '198.51.100.24/30', '198.51.100.28/30', '198.51.100.32/28'],
+            array_slice($this->parcalar(), 0, 6));
+        $parca->refresh();
+        $this->assertSame(['198.51.100.16', 30, 'musteri-y', null], [$parca->address, $parca->prefix, $parca->name, $parca->gateway_up]);
+        $this->assertNull($this->parca('198.51.100.28/30')->name);
+        $this->assertDatabaseHas('activity_logs', ['summary' => 'Parça bölündü: Grup A · 198.51.100.16/28 (musteri-y) → 4 × /30 (198.51.100.16/30 … 198.51.100.28/30)']);
     }
 
     #[Test]
-    public function ikiye_ayirma_kurali_ve_yetkisi(): void
+    public function parcalama_kurali_ve_yetkisi(): void
     {
-        $this->bol([[30, '0-255', 64]])->assertSessionHasNoErrors();
+        $this->bol([[28, '0-255', 16]])->assertSessionHasNoErrors();
 
-        /* /30 → /31 → /32: ikiye ayırma pencerenin açmadığı boyları açar. */
-        $this->actingAs($this->bolen())->post(route('ip-addresses.halve', $this->parca('198.51.100.0/30')));
-        $this->actingAs($this->bolen())->post(route('ip-addresses.halve', $this->parca('198.51.100.0/31')));
-        $this->assertSame(['198.51.100.0', '198.51.100.1', '198.51.100.2/31'], array_slice($this->parcalar(), 0, 3));
+        /* /28 → 16 × /32: pencerenin açmadığı boylar burada açılır. */
+        $this->actingAs($this->bolen())->post(route('ip-addresses.subdivide', $this->parca('198.51.100.0/28')), ['prefix' => 32]);
+        $this->assertSame(['198.51.100.0', '198.51.100.1', '198.51.100.15', '198.51.100.16/28'],
+            [...array_slice($this->parcalar(), 0, 2), ...array_slice($this->parcalar(), 15, 2)]);
+
+        foreach ([[28, '/28 parça /29 ile /32 arasında bir boya bölünür; /28 olmaz.'], [33, '/28 parça /29 ile /32 arasında bir boya bölünür; /33 olmaz.']] as [$boy, $hata]) {
+            $this->actingAs($this->bolen())
+                ->post(route('ip-addresses.subdivide', $this->parca('198.51.100.16/28')), ['prefix' => $boy])
+                ->assertSessionHas('error', $hata);
+        }
 
         $this->actingAs($this->bolen())
-            ->post(route('ip-addresses.halve', $this->parca('198.51.100.0/32')))
-            ->assertSessionHas('error', '/32 tek adrestir, ayrılmaz.');
+            ->post(route('ip-addresses.subdivide', $this->parca('198.51.100.16/28')))
+            ->assertSessionHas('error');
 
         $this->actingAs($this->bolen())
-            ->post(route('ip-addresses.halve', $this->blok))
-            ->assertSessionHas('error', 'Yalnız bir bloğun parçası ikiye ayrılır.');
+            ->post(route('ip-addresses.subdivide', $this->parca('198.51.100.0/32')), ['prefix' => 32])
+            ->assertSessionHas('error', '/32 tek adrestir, parçalanmaz.');
 
-        /* Arkadaki yarı yeni kayıttır: "ekle" yetkisi olmadan ayrılmaz. */
+        $this->actingAs($this->bolen())
+            ->post(route('ip-addresses.subdivide', $this->blok), ['prefix' => 25])
+            ->assertSessionHas('error', 'Yalnız bir bloğun parçası parçalanır.');
+
+        /* Öteki parçalar yeni kayıttır: "ekle" yetkisi olmadan parçalanmaz. */
         $this->actingAs($this->kullanici(['view', 'update']))
-            ->post(route('ip-addresses.halve', $this->parca('198.51.100.0/32')))
+            ->post(route('ip-addresses.subdivide', $this->parca('198.51.100.16/28')), ['prefix' => 29])
             ->assertForbidden();
 
-        $this->assertCount(66, $this->parcalar());
+        $this->assertCount(31, $this->parcalar());
     }
 
     #[Test]

@@ -17,10 +17,11 @@ use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Validation\Validator;
 
 /**
- * Parçayı iki eş parçaya ayırma (/28 → /29 + /29; bkz. Ipv4BlockRules).
- * Arkadaki yarı yeni kayıttır: düzenleme yanında grupta "ekle" de aranır.
+ * Parçayı seçilen boyda eş parçalara bölme (/28 → 4 × /30; bkz.
+ * Ipv4BlockRules). İlk parça kaydın kendisidir; ötekiler yeni kayıttır:
+ * düzenleme yanında grupta "ekle" de aranır.
  */
-class HalveIpAddressRequest extends FormRequest
+class SubdivideIpAddressRequest extends FormRequest
 {
     public function authorize(): bool
     {
@@ -32,14 +33,18 @@ class HalveIpAddressRequest extends FormRequest
     /** @return array<string, array<int, string>> */
     public function rules(): array
     {
-        return [];
+        return ['prefix' => ['required', 'integer']];
     }
 
     /** @return array<int, callable> */
     public function after(): array
     {
         return [function (Validator $validator): void {
-            $error = app(Ipv4BlockRules::class)->halveError($this->part());
+            if ($validator->errors()->isNotEmpty()) {
+                return;
+            }
+
+            $error = app(Ipv4BlockRules::class)->subdivideError($this->part(), $this->integer('prefix'));
 
             if ($error !== null) {
                 $validator->errors()->add('address', $error);
@@ -52,14 +57,16 @@ class HalveIpAddressRequest extends FormRequest
         return $this->route('ipAddress');
     }
 
-    /** @return array{0: ParsedAddress, 1: ParsedAddress} */
-    public function halves(): array
+    /** @return list<ParsedAddress> sıralı; ilki kaydın yeni hâli */
+    public function pieces(): array
     {
         $parser = app(IpAddressParser::class);
         $part = $this->part();
-        $half = Cidr::make($part->address, $part->prefix)->splitInto($part->prefix + 1);
 
-        return [$parser->parse((string) $half[0]), $parser->parse((string) $half[1])];
+        return array_map(
+            fn ($piece): ParsedAddress => $parser->parse((string) $piece),
+            Cidr::make($part->address, $part->prefix)->splitInto($this->integer('prefix')),
+        );
     }
 
     /** Hata pencere alanına değil, bildirim olarak döner: işlem bir düğmedir. */

@@ -236,27 +236,26 @@ class IpAddressListing
     }
 
     /**
-     * Parçanın birleştir ve ikiye ayır düğmeleri; parça değilse ya da
-     * kural geçirmiyorsa çizilmez.
+     * Parçanın birleştir ve parçala düğmeleri; parça değilse ya da kural
+     * geçirmiyorsa çizilmez.
      *
-     * @return array{canMerge: bool, mergeLabel: string|null, canHalve: bool, halveLabel: string|null}
+     * @return array{canMerge: bool, mergeLabel: string|null, canSubdivide: bool, subdividePrefixes: array<int, string>}
      */
     private function partActions(User $user, IpAddress $model): array
     {
         if ($this->rules->blockOf($model) === null) {
-            return ['canMerge' => false, 'mergeLabel' => null, 'canHalve' => false, 'halveLabel' => null];
+            return ['canMerge' => false, 'mergeLabel' => null, 'canSubdivide' => false, 'subdividePrefixes' => []];
         }
 
         $canMerge = $user->can('update', $model) && $user->can('delete', $model) && $this->rules->mergeError($model) === null;
-        $canHalve = $user->can('update', $model) && $this->rules->halveError($model) === null
+        $canSubdivide = $user->can('update', $model) && $this->rules->subdivideError($model) === null
             && $this->resolver->allows($user, IpAddressPolicy::RESOURCE, 'create', $model->address_group_id);
-        $half = '/'.($model->prefix + 1);
 
         return [
             'canMerge' => $canMerge,
             'mergeLabel' => $canMerge ? $model->notation.' + '.$this->rules->buddyNotation($model).' → '.$this->rules->mergedNotation($model) : null,
-            'canHalve' => $canHalve,
-            'halveLabel' => $canHalve ? "{$model->notation} → 2 × {$half}" : null,
+            'canSubdivide' => $canSubdivide,
+            'subdividePrefixes' => $canSubdivide ? $this->rules->subdividePrefixes($model) : [],
         ];
     }
 

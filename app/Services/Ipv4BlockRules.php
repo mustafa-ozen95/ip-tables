@@ -160,14 +160,34 @@ class Ipv4BlockRules
         };
     }
 
-    /** İkiye ayırmanın hatası; ayrılabiliyorsa null. */
-    public function halveError(IpAddress $part): ?string
+    /**
+     * Parçalamanın hatası; $prefix verilmezse yalnız parçanın kendisi
+     * denetlenir (düğme çizilsin mi). Parçalanabiliyorsa null.
+     */
+    public function subdivideError(IpAddress $part, ?int $prefix = null): ?string
     {
         return match (true) {
-            $this->blockOf($part) === null => 'Yalnız bir bloğun parçası ikiye ayrılır.',
-            $part->prefix >= Ipv4SplitLayout::MAX_PREFIX => '/'.Ipv4SplitLayout::MAX_PREFIX.' tek adrestir, ayrılmaz.',
+            $this->blockOf($part) === null => 'Yalnız bir bloğun parçası parçalanır.',
+            $part->prefix >= Ipv4SplitLayout::MAX_PREFIX => '/'.Ipv4SplitLayout::MAX_PREFIX.' tek adrestir, parçalanmaz.',
+            $prefix !== null && ($prefix <= $part->prefix || $prefix > Ipv4SplitLayout::MAX_PREFIX) => '/'.$part->prefix
+                .' parça /'.($part->prefix + 1).' ile /'.Ipv4SplitLayout::MAX_PREFIX." arasında bir boya bölünür; /{$prefix} olmaz.",
             default => null,
         };
+    }
+
+    /**
+     * Parçanın bölünebileceği boylar: [30 => '/30 · 4 parça', …].
+     *
+     * @return array<int, string>
+     */
+    public function subdividePrefixes(IpAddress $part): array
+    {
+        $prefixes = range($part->prefix + 1, Ipv4SplitLayout::MAX_PREFIX);
+
+        return array_combine($prefixes, array_map(
+            fn (int $p): string => "/{$p} · ".(2 ** ($p - $part->prefix)).' parça',
+            $prefixes,
+        ));
     }
 
     /** Birleşince çıkacak parça: "192.0.2.0/28". */

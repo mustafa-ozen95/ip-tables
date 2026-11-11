@@ -76,12 +76,12 @@ Route::middleware('auth')->group(function (): void {
      * Ekleme ve düzenleme formunun AYRI SAYFASI YOKTUR: ikisi de liste
      * ekranının üstünde pencere olarak açılır (?pencere=ekle / ?pencere=duzenle).
      */
-    /* /24 bloğu böl / bölmeyi kaldır, parçayı birleştir / ikiye ayır (bkz. Ipv4BlockRules). */
+    /* /24 bloğu böl / bölmeyi kaldır, parçayı birleştir / parçala (bkz. Ipv4BlockRules). */
     Route::controller(AddressSplitController::class)->group(function (): void {
         Route::post('addresses/{ipAddress}/split', 'store')->name('ip-addresses.split');
         Route::delete('addresses/{ipAddress}/split', 'destroy')->name('ip-addresses.unsplit');
         Route::post('addresses/{ipAddress}/merge', 'merge')->name('ip-addresses.merge');
-        Route::post('addresses/{ipAddress}/halve', 'halve')->name('ip-addresses.halve');
+        Route::post('addresses/{ipAddress}/subdivide', 'subdivide')->name('ip-addresses.subdivide');
     });
 
     Route::resource('addresses', IpAddressController::class)

@@ -17,7 +17,7 @@ use App\Support\Net\Cidr;
  *
  * Seçilmeyen alan BOŞ ALAN olarak kalır ve sonra aynı pencereyle bölünür.
  * Bölme yine tek kattır: aralık var olan bir parçayla çakışamaz; parçanın
- * boyu yalnız ikiye ayırma ve birleştirmeyle değişir (bkz. Ipv4BlockRules).
+ * boyu yalnız parçalama ve birleştirmeyle değişir (bkz. Ipv4BlockRules).
  */
 class Ipv4SplitLayout
 {
@@ -27,7 +27,7 @@ class Ipv4SplitLayout
 
     /**
      * Pencerede seçilebilen en küçük boy. /31 ve /32 tek tek seçilirse liste
-     * yüzlerce satır olurdu; onlar parçayı ikiye ayırarak açılır.
+     * yüzlerce satır olurdu; onlar parça parçalanarak açılır.
      */
     public const SPLIT_MAX_PREFIX = 30;
 

@@ -129,13 +129,15 @@
                         </form>
                     @endif
 
-                    @if ($selected['canHalve'])
-                        <form method="POST" action="{{ route('ip-addresses.halve', $selected['model']) }}" data-inline
-                              data-confirm="{{ $selected['halveLabel'] }}. Bu kayıt öndeki yarı olur ve adını korur; arkadaki yarı boş açılır."
-                              data-confirm-title="İkiye ayır"
+                    @if ($selected['canSubdivide'])
+                        <form method="POST" action="{{ route('ip-addresses.subdivide', $selected['model']) }}" class="row" data-inline
+                              data-confirm="{{ $selected['notation'] }} seçilen boyda parçalara bölünecek. Bu kayıt ilk parça olur ve adını korur; ötekiler boş açılır."
+                              data-confirm-title="Parçala"
                               data-confirm-reasonless>
                             @csrf
-                            <button type="submit" class="btn btn--sm">İkiye ayır</button>
+                            <x-form.select name="prefix" id="subdivide-prefix" class="select--cell" aria-label="Parça boyu"
+                                           :options="$selected['subdividePrefixes']" />
+                            <button type="submit" class="btn btn--sm">Parçala</button>
                         </form>
                     @endif
 
@@ -206,7 +208,7 @@
                     <p class="field__hint">
                         Sırayla subnet, kaç parça, sonra aralık: aralık listesi o kadar parçanın art arda sığdığı boş yerleri
                         gösterir (/29, 10 parça → .0 – .79). Kalan boş alan sonra yine bölünür; başka boy için Böl'ü yeniden
-                        açın. /31 ve /32 için parçayı "İkiye ayır".
+                        açın. /31 ve /32 için parçayı ⋮ → "Parçala".
                     </p>
                 </div>
 

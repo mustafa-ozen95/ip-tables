@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
-use App\Http\Requests\IpAddress\HalveIpAddressRequest;
 use App\Http\Requests\IpAddress\MergeIpAddressRequest;
 use App\Http\Requests\IpAddress\SplitIpAddressRequest;
+use App\Http\Requests\IpAddress\SubdivideIpAddressRequest;
 use App\Http\Requests\IpAddress\UnsplitIpAddressRequest;
 use App\Models\IpAddress;
 use App\Services\IpAddressWriter;
@@ -16,8 +16,8 @@ use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Routing\Controllers\Middleware;
 
 /**
- * /24 bloğun bölmesi: böl, bölmeyi kaldır, parçayı birleştir ya da ikiye
- * ayır. Hepsi listeye, kaydı seçili ve bloğu açık olarak döner.
+ * /24 bloğun bölmesi: böl, bölmeyi kaldır, parçayı birleştir ya da
+ * parçala. Hepsi listeye, kaydı seçili ve bloğu açık olarak döner.
  */
 class AddressSplitController extends Controller implements HasMiddleware
 {
@@ -26,7 +26,7 @@ class AddressSplitController extends Controller implements HasMiddleware
     public static function middleware(): array
     {
         return [
-            new Middleware('can:update,ipAddress', only: ['store', 'merge', 'halve']),
+            new Middleware('can:update,ipAddress', only: ['store', 'merge', 'subdivide']),
             new Middleware('can:delete,ipAddress', only: ['destroy', 'merge']),
         ];
     }
@@ -63,13 +63,13 @@ class AddressSplitController extends Controller implements HasMiddleware
         return $this->show($kept, $block, "Parçalar {$kept->notation} olarak birleştirildi.");
     }
 
-    public function halve(HalveIpAddressRequest $request, IpAddress $ipAddress): RedirectResponse
+    public function subdivide(SubdivideIpAddressRequest $request, IpAddress $ipAddress): RedirectResponse
     {
         $block = $this->rules->blockOf($ipAddress);
-        [$first, $second] = $request->halves();
-        $this->writer->halve($ipAddress, [$first, $second]);
+        $pieces = $request->pieces();
+        $this->writer->subdivide($ipAddress, $pieces);
 
-        return $this->show($ipAddress, $block, "Parça {$first->notation()} ve {$second->notation()} olarak ayrıldı.");
+        return $this->show($ipAddress, $block, 'Parça '.count($pieces)." × /{$pieces[0]->prefix} olarak bölündü.");
     }
 
     /** $open: parçaları açık gelecek blok. */

@@ -259,7 +259,7 @@ class BlockListTest extends TestCase
      * birden çok /24 var: bloğun grubu tembel yüklenirse burada patlıyordu.
      */
     #[Test]
-    public function parcanin_ayrintisinda_birlestir_ve_ikiye_ayir(): void
+    public function parcanin_ayrintisinda_birlestir_ve_parcala(): void
     {
         $this->adres('198.51.100.0/24');
         $this->adres('203.0.113.0/24');
@@ -272,16 +272,16 @@ class BlockListTest extends TestCase
         $this->liste($yetkili, ['kayit' => $parca->uuid, 'pencere' => 'islemler'])
             ->assertSee(route('ip-addresses.merge', $parca), false)
             ->assertSee('198.51.100.0/29 + 198.51.100.8/29 → 198.51.100.0/28')
-            ->assertSee(route('ip-addresses.halve', $parca), false)
-            ->assertSee('198.51.100.0/29 → 2 × /30');
+            ->assertSee(route('ip-addresses.subdivide', $parca), false)
+            ->assertSeeInOrder(['/30 · 2 parça', '/31 · 4 parça', '/32 · 8 parça']);
 
         $this->liste($yetkili, ['kayit' => $yalniz->uuid, 'pencere' => 'islemler'])
             ->assertDontSee(route('ip-addresses.merge', $yalniz), false)
-            ->assertSee(route('ip-addresses.halve', $yalniz), false);
+            ->assertSee(route('ip-addresses.subdivide', $yalniz), false);
 
         $this->liste($this->kullanici(['view']), ['kayit' => $parca->uuid, 'pencere' => 'islemler'])
             ->assertDontSee(route('ip-addresses.merge', $parca), false)
-            ->assertDontSee(route('ip-addresses.halve', $parca), false);
+            ->assertDontSee(route('ip-addresses.subdivide', $parca), false);
     }
 
     /** Karşılaştırma: bölünmemiş blok silinebilir, "Adresi sil" görünür. */

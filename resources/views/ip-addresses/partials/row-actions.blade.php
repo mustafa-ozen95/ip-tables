@@ -1,6 +1,6 @@
 {{--
     Satırın sonundaki ⋮: kaydın bilgisini ve işlemlerini (düzenle, böl,
-    birleştir, ikiye ayır, bölmeyi kaldır, sil, kayıtlar) pencerede açar.
+    birleştir, parçala, bölmeyi kaldır, sil, kayıtlar) pencerede açar.
     Hangi işlemin çıkacağına pencere karar verir (IpAddressListing::selected).
 
     $record
