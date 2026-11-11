@@ -3,27 +3,35 @@
  *
  * ADRES SATIRI: erişim kaydı satırının (credential-row.css) sütun yerleşimi
  * bu panele uymuyor — adreste tür, platform, kullanıcı ve parola yok; ad
- * yerine ADRES satırın başında. Renk, tipografi, alt grup başlığı ve
- * tıklanır satır katmanı credential-row'dan gelir; burada yalnız ızgara
- * tanımlanır.
+ * yerine ADRES satırın başında. Renk, tipografi ve alt grup başlığı
+ * credential-row'dan gelir; burada yalnız ızgara tanımlanır.
+ *
+ * Ayrıntı sütunu yok: işlemler satırın sonundadır (table__row-actions,
+ * tablodaki gibi üzerine gelince belirir). Sütun genişliği en geniş hâle
+ * (Düzenle, Böl, ⋮) göredir ki satırlar alt alta hizalı kalsın.
  */
 .address-row {
     display: grid;
     align-items: center;
     gap: var(--space-3);
-    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.2fr) 120px minmax(0, 1.7fr);
-    grid-template-areas: 'adres ad tur aciklama';
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.2fr) 120px minmax(0, 1.7fr) 150px;
+    grid-template-areas: 'adres ad tur aciklama islem';
 }
 
 .address-row__address     { grid-area: adres; }
 .address-row__name        { grid-area: ad; }
 .address-row__type        { grid-area: tur; }
 .address-row__description { grid-area: aciklama; }
+.address-row__actions     { grid-area: islem; }
+
+.address-row:hover .table__row-actions {
+    opacity: 1;
+}
 
 @media (max-width: 1100px) {
     .address-row {
-        grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) 120px;
-        grid-template-areas: 'adres ad tur';
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) 120px 150px;
+        grid-template-areas: 'adres ad tur islem';
     }
 
     .address-row__description { display: none; }
@@ -34,7 +42,7 @@
         grid-template-columns: minmax(0, 1fr) auto;
         grid-template-areas:
             'adres tur'
-            'ad    ad';
+            'ad    islem';
         row-gap: var(--space-2);
         padding-top: var(--space-3);
         padding-bottom: var(--space-3);
@@ -49,22 +57,17 @@
  * bileşeni yok; katlanır panelin (collapsible.css) oku ve renkleri aynen
  * alınır, satır düzeni address-row'dur.
  *
- * İKİ AYRI TIKLAMA: satırın kendisi bağlantıdır (credential-row__link
- * katmanı) ve ayrıntıyı sağda açar; parçaları yalnız soldaki ok açar. Bunun
- * için betik yazılmaz: <summary> tıklamayı geçirmez, bağlantı katmanı ve
- * onun üstündeki ok alır. Klavyede <summary> odaklanır, Enter/Boşluk açar.
+ * Satıra tıklamak parçaları açar (<summary>, betiksiz); satır sonundaki
+ * düğmeler tıklamayı kendileri alır, satırı açıp kapamaz. Klavyede
+ * <summary> odaklanır, Enter/Boşluk açar.
  */
 .block-node > summary {
     list-style: none;
-    pointer-events: none;
+    cursor: pointer;
 }
 
 .block-node > summary::-webkit-details-marker {
     display: none;
-}
-
-.block-node > summary a {
-    pointer-events: auto;
 }
 
 .block-node__address {
@@ -73,18 +76,14 @@
     min-width: 0;
 }
 
-/* Ok bağlantı katmanının ÜSTÜNDE; tıklama alanı üçgenden büyük. */
+/* Tıklama alanı üçgenden büyük. */
 .block-node__toggle {
-    position: relative;
-    z-index: 1;
     display: inline-flex;
     flex-shrink: 0;
     align-items: center;
     justify-content: center;
     margin-left: calc(var(--space-2) * -1);
     padding: var(--space-2);
-    cursor: pointer;
-    pointer-events: auto;
 }
 
 .block-node__toggle::before {
@@ -98,10 +97,6 @@
 }
 
 /* Bölünmemiş blokta ok yok; yeri boş kalır ki adresler alt alta hizalansın. */
-.block-node__toggle--none {
-    pointer-events: none;
-}
-
 .block-node__toggle--none::before {
     border-left-color: transparent;
 }

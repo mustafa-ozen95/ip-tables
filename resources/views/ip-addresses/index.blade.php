@@ -56,6 +56,7 @@
                     <span class="address-row__name">Ad</span>
                     <span class="address-row__type">Tür</span>
                     <span class="address-row__description">Açıklama</span>
+                    <span class="address-row__actions"></span>
                 </div>
 
                 @foreach ($sections as $section)
@@ -63,90 +64,6 @@
                 @endforeach
             </div>
         </div>
-
-        @if ($selected)
-            <aside class="detail">
-                <div class="detail__head">
-                    <div class="detail__title">{{ $selected['notation'] }}</div>
-                    <p class="detail__subtitle">{{ $selected['groupName'] }}</p>
-                </div>
-
-                <div class="detail__body">
-                    <div class="detail__section">
-                        <span class="eyebrow">Adres</span>
-                        <div class="detail__block">
-                            <x-ui.copyable label="Adres">{{ $selected['notation'] }}</x-ui.copyable>
-                        </div>
-                        <div class="detail__block">
-                            <x-ui.badge :variant="$selected['kind']->badge()">{{ $selected['kind']->label() }}</x-ui.badge>
-                        </div>
-                        <x-ui.facts class="detail__block" :rows="$selected['facts']" />
-                    </div>
-
-                    @if ($selected['description'])
-                        <div class="detail__section">
-                            <span class="eyebrow">Açıklama</span>
-                            <p class="credential-note">{{ $selected['description'] }}</p>
-                        </div>
-                    @endif
-
-                    @can('viewAny', App\Models\ActivityLog::class)
-                        <div class="detail__section">
-                            <span class="eyebrow">Geçmiş</span>
-                            <a href="{{ route('logs.index', ['kayit' => $selected['uuid']]) }}"
-                               class="btn btn--sm detail__block">Kayıtlarda göster</a>
-                        </div>
-                    @endcan
-                </div>
-
-                <div class="detail__foot">
-                    @if ($selected['canUpdate'])
-                        <a href="{{ route('ip-addresses.index', ['grup' => $selectedGroup?->uuid, 'q' => $query ?: null, 'kayit' => $selected['uuid'], 'pencere' => 'duzenle']) }}"
-                           class="btn btn--sm" data-modal-open="record-edit">Düzenle</a>
-                    @endif
-
-                    @if ($selected['canSplit'])
-                        <a href="{{ route('ip-addresses.index', ['grup' => $selectedGroup?->uuid, 'q' => $query ?: null, 'kayit' => $selected['uuid'], 'pencere' => 'bol']) }}"
-                           class="btn btn--sm" data-modal-open="block-split">Böl</a>
-                    @endif
-
-                    @if ($selected['canMerge'])
-                        <form method="POST" action="{{ route('ip-addresses.merge', $selected['model']) }}" data-inline
-                              data-confirm="{{ $selected['mergeLabel'] }}. Adı olan parça kalır, öbürü silinir."
-                              data-confirm-title="Parçaları birleştir"
-                              data-confirm-reasonless>
-                            @csrf
-                            <button type="submit" class="btn btn--sm">Birleştir</button>
-                        </form>
-                    @endif
-
-                    @if ($selected['canHalve'])
-                        <form method="POST" action="{{ route('ip-addresses.halve', $selected['model']) }}" data-inline
-                              data-confirm="{{ $selected['halveLabel'] }}. Bu kayıt öndeki yarı olur ve adını korur; arkadaki yarı boş açılır."
-                              data-confirm-title="İkiye ayır"
-                              data-confirm-reasonless>
-                            @csrf
-                            <button type="submit" class="btn btn--sm">İkiye ayır</button>
-                        </form>
-                    @endif
-
-                    @if ($selected['canUnsplit'])
-                        <x-ui.delete-form :action="route('ip-addresses.unsplit', $selected['model'])"
-                                          confirm="{{ $selected['notation'] }} bölmesi kaldırılacak; {{ $selected['partCount'] }} parça adlarıyla birlikte silinecek."
-                                          title="Bölmeyi kaldır"
-                                          label="Bölmeyi kaldır"
-                                          verify="{{ $selected['notation'] }}" />
-                    @endif
-
-                    @if ($selected['canDelete'])
-                        <x-ui.delete-form :action="route('ip-addresses.destroy', $selected['model'])"
-                                          confirm="{{ $selected['notation'] }} silinecek."
-                                          title="Adresi sil"
-                                          verify="{{ $selected['notation'] }}" />
-                    @endif
-                </div>
-            </aside>
-        @endif
     </div>
 
     {{-- Aynı anda tek pencere: biri doğrulama hatasıyla açıksa diğeri çizilmez. --}}
@@ -174,6 +91,77 @@
                               :group-options="$updateGroupOptions"
                               :sub-group-options="$subGroupOptions"
                               :sub-group-map="$subGroupMap" />
+    @endif
+
+    {{--
+        ⋮ penceresi: kaydın bilgisi ve satırda yer almayan işlemler. Düğmeler
+        yalnız isteğin de geçireceği durumda çizilir (IpAddressListing::selected).
+    --}}
+    @if ($selected && $window === 'islemler')
+        <x-ui.modal id="record-actions" :title="$selected['notation']" :open="true">
+            <div class="modal__body stack">
+                <p class="field__hint">{{ $selected['groupName'] }}</p>
+                <x-ui.copyable label="Adres">{{ $selected['notation'] }}</x-ui.copyable>
+                <x-ui.facts :rows="$selected['facts']" />
+
+                @if ($selected['description'])
+                    <p class="credential-note">{{ $selected['description'] }}</p>
+                @endif
+
+                <div class="row row--wrap">
+                    @if ($selected['canUpdate'])
+                        <a href="{{ route('ip-addresses.index', ['grup' => $selectedGroup?->uuid, 'q' => $query ?: null, 'kayit' => $selected['uuid'], 'pencere' => 'duzenle']) }}"
+                           class="btn btn--sm">Düzenle</a>
+                    @endif
+
+                    @if ($selected['canSplit'])
+                        <a href="{{ route('ip-addresses.index', ['grup' => $selectedGroup?->uuid, 'kayit' => $selected['uuid'], 'pencere' => 'bol']) }}"
+                           class="btn btn--sm">Böl</a>
+                    @endif
+
+                    @if ($selected['canMerge'])
+                        <form method="POST" action="{{ route('ip-addresses.merge', $selected['model']) }}" data-inline
+                              data-confirm="{{ $selected['mergeLabel'] }}. Adı olan parça kalır, öbürü silinir."
+                              data-confirm-title="Parçaları birleştir"
+                              data-confirm-reasonless>
+                            @csrf
+                            <button type="submit" class="btn btn--sm">Birleştir</button>
+                        </form>
+                    @endif
+
+                    @if ($selected['canHalve'])
+                        <form method="POST" action="{{ route('ip-addresses.halve', $selected['model']) }}" data-inline
+                              data-confirm="{{ $selected['halveLabel'] }}. Bu kayıt öndeki yarı olur ve adını korur; arkadaki yarı boş açılır."
+                              data-confirm-title="İkiye ayır"
+                              data-confirm-reasonless>
+                            @csrf
+                            <button type="submit" class="btn btn--sm">İkiye ayır</button>
+                        </form>
+                    @endif
+
+                    @can('viewAny', App\Models\ActivityLog::class)
+                        <a href="{{ route('logs.index', ['kayit' => $selected['uuid']]) }}" class="btn btn--sm">Kayıtlarda göster</a>
+                    @endcan
+
+                    @if ($selected['canUnsplit'])
+                        <x-ui.delete-form :action="route('ip-addresses.unsplit', $selected['model'])"
+                                          confirm="{{ $selected['notation'] }} bölmesi kaldırılacak; {{ $selected['partCount'] }} parça adlarıyla birlikte silinecek."
+                                          title="Bölmeyi kaldır"
+                                          label="Bölmeyi kaldır"
+                                          verify="{{ $selected['notation'] }}" />
+                    @endif
+
+                    @if ($selected['canDelete'])
+                        <x-ui.delete-form :action="route('ip-addresses.destroy', $selected['model'])"
+                                          confirm="{{ $selected['notation'] }} silinecek."
+                                          title="Adresi sil"
+                                          verify="{{ $selected['notation'] }}" />
+                    @endif
+                </div>
+            </div>
+
+            <x-ui.modal-actions :submit="false" cancel="Kapat" />
+        </x-ui.modal>
     @endif
 
     {{--

@@ -1,8 +1,7 @@
 {{-- Bloğun satırı: Tür sütununda bloğun doluluğu, açıklamada parça sayısı. --}}
 <span class="address-row__address block-node__address">
     <span @class(['block-node__toggle', 'block-node__toggle--none' => $block['parts'] === []]) aria-hidden="true"></span>
-    <a href="{{ route('ip-addresses.index', ['grup' => $selectedGroup?->uuid, 'kayit' => $block['record']->uuid]) }}"
-       class="credential-row__link mono truncate">{{ $block['notation'] }}</a>
+    <span class="mono truncate">{{ $block['notation'] }}</span>
 </span>
 
 <span class="address-row__name truncate">
@@ -17,3 +16,7 @@
 </span>
 
 <span class="address-row__description text-sm text-muted truncate">{{ $block['partsLabel'] }}@if ($block['record']->description) · {{ $block['record']->description }}@endif</span>
+
+<span class="address-row__actions">
+    @include('ip-addresses.partials.row-actions', ['record' => $block['record'], 'canEdit' => $rowCan[$block['record']->address_group_id]['update'] ?? false, 'canSplit' => $block['canSplit']])
+</span>

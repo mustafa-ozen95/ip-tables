@@ -17,8 +17,8 @@ use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
 
 /**
- * Adres listesinde /24 bloklar: katlanır satır, parçalar altında tablo,
- * böl / bölmeyi kaldır sağdaki ayrıntıda (bkz. Ipv4BlockPlan).
+ * Adres listesinde /24 bloklar: katlanır satır, parçalar altında tablo.
+ * Düzenle ve Böl satırın sonunda, kalan işlemler ⋮ penceresinde.
  *
  * Adresler belgeleme aralıklarındandır (RFC 5737 / 3849).
  */
@@ -112,23 +112,51 @@ class BlockListTest extends TestCase
             ->assertDontSee('block-node');
     }
 
-    /** Böl düğmesi ve penceresi yalnız bölebilene; izleyici adresi elle yazsa da açılmaz. */
+    /** Böl düğmesi (satır sonunda) ve penceresi yalnız bölebilene; izleyici adresi elle yazsa da açılmaz. */
     #[Test]
-    public function bol_ayrintida_yalniz_yetkiliye(): void
+    public function bol_satirda_yalniz_yetkiliye(): void
     {
         $blok = $this->adres('198.51.100.0/24');
         $pencere = ['kayit' => $blok->uuid, 'pencere' => 'bol'];
 
-        $this->liste($this->kullanici(), $pencere)
+        $this->liste($this->kullanici())
             ->assertOk()
-            ->assertDontSee('data-modal-open="block-split"', false)
+            ->assertDontSee($this->bagla($blok, 'bol'))
+            ->assertDontSee($this->bagla($blok, 'duzenle'))
+            ->assertSee($this->bagla($blok, 'islemler'));
+
+        $this->liste($this->kullanici(), $pencere)
             ->assertDontSee(route('ip-addresses.split', $blok), false);
+
+        $this->liste($this->kullanici(['view', 'update', 'create']))
+            ->assertSee($this->bagla($blok, 'bol'))
+            ->assertSee($this->bagla($blok, 'duzenle'));
 
         $this->liste($this->kullanici(['view', 'update', 'create']), $pencere)
             ->assertOk()
-            ->assertSee('data-modal-open="block-split"', false)
             ->assertSee(route('ip-addresses.split', $blok), false)
             ->assertSee('198.51.100.0/24 bölünecek');
+    }
+
+    /** Ayrıntı sütunu yok: işlemler satırda, kalanı ⋮ penceresinde. */
+    #[Test]
+    public function ayrinti_sutunu_yok_bilgi_pencerede(): void
+    {
+        $blok = $this->adres('198.51.100.0/24', 'musteri-a');
+
+        $this->liste($this->kullanici(), ['kayit' => $blok->uuid])
+            ->assertDontSee('class="detail"', false)
+            ->assertDontSee('id="record-actions"', false);
+
+        $this->liste($this->kullanici(), ['kayit' => $blok->uuid, 'pencere' => 'islemler'])
+            ->assertSee('id="record-actions"', false)
+            ->assertSeeInOrder(['Grup A', '198.51.100.0/24', 'Önek', '/24', 'musteri-a']);
+    }
+
+    /** Satır sonundaki bağlantı: bu kaydın bu penceresi. */
+    private function bagla(IpAddress $kayit, string $pencere): string
+    {
+        return route('ip-addresses.index', ['grup' => $this->grup->uuid, 'kayit' => $kayit->uuid, 'pencere' => $pencere]);
     }
 
     /** Bölünmüş blokta "Sil" yok (reddedilecekti), "Bölmeyi kaldır" var; Böl yok. */
@@ -139,12 +167,12 @@ class BlockListTest extends TestCase
         $this->adres('198.51.100.0/25');
         $this->adres('198.51.100.128/25');
 
-        $this->liste($this->kullanici(['view', 'update', 'create', 'delete']), ['kayit' => $blok->uuid])
+        $this->liste($this->kullanici(['view', 'update', 'create', 'delete']), ['kayit' => $blok->uuid, 'pencere' => 'islemler'])
             ->assertOk()
             ->assertSee(route('ip-addresses.unsplit', $blok), false)
             ->assertSee('2 parça adlarıyla birlikte silinecek')
             ->assertDontSee('Adresi sil')
-            ->assertDontSee('data-modal-open="block-split"', false);
+            ->assertDontSee($this->bagla($blok, 'bol'));
     }
 
     /** Kısmen bölünmüş blok: boş alan tabloda satır, Böl durur ve pencere boş alanı önerir. */
@@ -192,7 +220,7 @@ class BlockListTest extends TestCase
             ->assertOk()
             ->assertSee('1 parça · 192 adres bölünmemiş')
             ->assertSeeInOrder(['198.51.100.0/26', '198.51.100.64 – .255', '192 adres', 'Bölünmemiş'])
-            ->assertSee('data-modal-open="block-split"', false)
+            ->assertSee($this->bagla($blok, 'bol'))
             ->assertSee('Boş alan: 198.51.100.64 – .255 (192 adres)')
             ->assertSee('name="ranges[0][prefix]"', false)
             ->assertDontSee('name="ranges[1][prefix]"', false)
@@ -233,17 +261,17 @@ class BlockListTest extends TestCase
 
         $yetkili = $this->kullanici(['view', 'update', 'create', 'delete']);
 
-        $this->liste($yetkili, ['kayit' => $parca->uuid])
+        $this->liste($yetkili, ['kayit' => $parca->uuid, 'pencere' => 'islemler'])
             ->assertSee(route('ip-addresses.merge', $parca), false)
             ->assertSee('198.51.100.0/29 + 198.51.100.8/29 → 198.51.100.0/28')
             ->assertSee(route('ip-addresses.halve', $parca), false)
             ->assertSee('198.51.100.0/29 → 2 × /30');
 
-        $this->liste($yetkili, ['kayit' => $yalniz->uuid])
+        $this->liste($yetkili, ['kayit' => $yalniz->uuid, 'pencere' => 'islemler'])
             ->assertDontSee(route('ip-addresses.merge', $yalniz), false)
             ->assertSee(route('ip-addresses.halve', $yalniz), false);
 
-        $this->liste($this->kullanici(['view']), ['kayit' => $parca->uuid])
+        $this->liste($this->kullanici(['view']), ['kayit' => $parca->uuid, 'pencere' => 'islemler'])
             ->assertDontSee(route('ip-addresses.merge', $parca), false)
             ->assertDontSee(route('ip-addresses.halve', $parca), false);
     }
@@ -254,7 +282,7 @@ class BlockListTest extends TestCase
     {
         $blok = $this->adres('198.51.100.0/24');
 
-        $this->liste($this->kullanici(['view', 'delete']), ['kayit' => $blok->uuid])
+        $this->liste($this->kullanici(['view', 'delete']), ['kayit' => $blok->uuid, 'pencere' => 'islemler'])
             ->assertOk()
             ->assertSee('Adresi sil')
             ->assertDontSee(route('ip-addresses.unsplit', $blok), false);
@@ -267,9 +295,9 @@ class BlockListTest extends TestCase
         $parca = $this->adres('198.51.100.0/25');
         $this->adres('198.51.100.128/25');
 
-        $this->liste($this->kullanici(['view', 'update', 'delete']), ['kayit' => $parca->uuid])
+        $this->liste($this->kullanici(['view', 'update', 'delete']), ['kayit' => $parca->uuid, 'pencere' => 'islemler'])
             ->assertOk()
             ->assertDontSee('Adresi sil')
-            ->assertSee('data-modal-open="record-edit"', false);
+            ->assertSee($this->bagla($parca, 'duzenle'));
     }
 }

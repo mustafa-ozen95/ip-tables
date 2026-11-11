@@ -119,6 +119,7 @@ class Ipv4BlockPlan
                 default => count($parts).' parça',
             },
             'used' => $used,
+            'hasFree' => $parts === [] || $freeCount > 0,
             ...$this->state($used, 256),
             'open' => ($openBlock !== null && $block['record']->uuid === $openBlock)
                 || ($selected !== null && in_array($selected, array_map(fn (array $p): string => (string) $p['record']->uuid, $parts), true)),

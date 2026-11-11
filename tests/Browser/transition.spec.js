@@ -129,10 +129,11 @@ test('gecisten sonra silme onayi acilir ve vazgecilir', async ({ page }) => {
     await girisYap(page);
 
     await page.getByRole('link', { name: /^IPv4\b/ }).click();
-    await page.locator('.grid-row .credential-row__link').first().click();
-    await expect(page.locator('.detail')).toBeVisible();
+    /* Düz bir adres: bölünmüş bloğun Sil'i yok, yerinde "Bölmeyi kaldır" durur. */
+    await page.getByRole('link', { name: '192.0.2.10 işlemleri' }).click();
+    await expect(page.locator('#record-actions')).toBeVisible();
 
-    await page.locator('.detail').getByRole('button', { name: 'Sil' }).click();
+    await page.locator('#record-actions').getByRole('button', { name: 'Sil' }).click();
     await expect(page.locator('[data-confirm-dialog]')).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(page.locator('[data-confirm-dialog]')).toBeHidden();
@@ -147,12 +148,14 @@ test('gecisten sonra silme onayi acilir ve vazgecilir', async ({ page }) => {
  * dışındaydı (kayıt seçiliyken scrollLeft 0, detay yüzlerce piksel sağda).
  *
  * Kural tek: en sağdaki görünür bölme, inilen en derin seviyedir. Geniş
- * ekranda şerit taşmaz, kural hiçbir şey yapmaz — bu da sınanıyor.
+ * ekranda şerit taşmaz, kural hiçbir şey yapmaz — bu da sınanıyor. Adres
+ * ekranında ayrıntı sütunu yok: kayıt seçmek (⋮) bir pencere açar, şerit
+ * adres listesinde kalır.
  */
 async function seritDurumu(page) {
     return page.evaluate(() => {
         const serit = document.querySelector('.columns');
-        const bolmeler = [...serit.querySelectorAll(':scope > .column, :scope > .detail')]
+        const bolmeler = [...serit.querySelectorAll(':scope > .column')]
             .filter((bolme) => getComputedStyle(bolme).display !== 'none');
         const son = bolmeler[bolmeler.length - 1];
 
@@ -180,18 +183,19 @@ test('serit en derin bolmeye iner (dar ekran), genis ekranda dokunmaz', async ({
         expect(liste.scrollLeft).toBe(0);
     }
 
-    // Kayıt seçilince en sağdaki bölme DETAY olur ve şerit oraya iner.
-    await page.locator('.grid-row .credential-row__link', { hasText: '192.0.2.11' }).click();
+    // Kayıt seçilince pencere açılır; şerit yine adres listesinde durur.
+    await page.getByRole('link', { name: '192.0.2.11 işlemleri' }).click();
+    await expect(page.locator('#record-actions')).toBeVisible();
     await page.waitForTimeout(400);
 
-    const detay = await seritDurumu(page);
+    const kayit = await seritDurumu(page);
 
-    expect(detay.sonBolme).toBe('detail');
+    expect(kayit.sonBolme).toBe('column');
 
-    if (detay.tasiyor) {
-        expect(detay.scrollLeft).toBeCloseTo(detay.hedef, -1);
-        expect(detay.scrollLeft).toBeGreaterThan(0);
+    if (kayit.tasiyor) {
+        expect(kayit.scrollLeft).toBeCloseTo(kayit.hedef, -1);
+        expect(kayit.scrollLeft).toBeGreaterThan(0);
     } else {
-        expect(detay.scrollLeft).toBe(0);
+        expect(kayit.scrollLeft).toBe(0);
     }
 });

@@ -11,9 +11,7 @@
 @forelse ($section['rows'] as $row)
     <div class="grid-row address-row"
          @if ($selected && $selected['uuid'] === $row->uuid) aria-selected="true" @endif>
-        {{-- Satırın tamamı tıklanır (credential-row__link katmanı); etiket adres hücresidir. --}}
-        <a href="{{ route('ip-addresses.index', ['grup' => $selectedGroup?->uuid, 'q' => $query ?: null, 'kayit' => $row->uuid]) }}"
-           class="address-row__address credential-row__link mono truncate">{{ $row->notation }}</a>
+        <span class="address-row__address mono truncate">{{ $row->notation }}</span>
 
         <span class="address-row__name truncate">
             {{ $row->name ?? '—' }}
@@ -27,6 +25,10 @@
         </span>
 
         <span class="address-row__description text-sm text-muted truncate">{{ $row->description ?? '' }}</span>
+
+        <span class="address-row__actions">
+            @include('ip-addresses.partials.row-actions', ['record' => $row, 'canEdit' => $rowCan[$row->address_group_id]['update'] ?? false, 'canSplit' => false])
+        </span>
     </div>
 @empty
     @if ($section['blocks'] === [])

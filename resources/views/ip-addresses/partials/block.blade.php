@@ -1,8 +1,8 @@
 {{--
-    Listede bir /24 blok (bkz. Ipv4BlockPlan). Satırın tamamı bağlantıdır,
-    ayrıntıyı sağda açar. Bölünmüş bloğun parçalarını YALNIZ soldaki ok
-    açar; blok kapalı gelir (bkz. panel-custom.css, BLOK LİSTESİ). Kısmen
-    bölünmüş blokta bölünmemiş alan da tabloda bağlantısız satırdır.
+    Listede bir /24 blok (bkz. Ipv4BlockPlan). Bölünmüş bloğun satırına
+    tıklamak parçalarını açar; blok kapalı gelir (bkz. panel-custom.css,
+    BLOK LİSTESİ). İşlemler satırın sonundadır. Kısmen bölünmüş blokta
+    bölünmemiş alan da tabloda satırdır; Böl'ü bloğa gider.
 --}}
 @if ($block['parts'] !== [])
     <details class="block-node" @if ($block['open']) open @endif>
@@ -23,24 +23,31 @@
                             <th>Maske</th>
                             <th>Ad</th>
                             <th>Durum</th>
+                            <th><span class="visually-hidden">İşlemler</span></th>
                         </tr>
                     </thead>
                     <tbody>
                         @foreach ($block['parts'] as $part)
                             <tr>
-                                <td class="table__cell--mono" data-label="Ağ">
-                                    @if ($part['free'])
-                                        {{ $part['notation'] }}
-                                    @else
-                                        <a href="{{ route('ip-addresses.index', ['grup' => $selectedGroup?->uuid, 'kayit' => $part['record']->uuid]) }}">{{ $part['notation'] }}</a>
-                                    @endif
-                                </td>
+                                <td class="table__cell--mono" data-label="Ağ">{{ $part['notation'] }}</td>
                                 <td class="table__cell--mono" data-label="Ağ geçidi">{{ $part['gateway'] ?? '—' }}</td>
                                 <td class="table__cell--mono" data-label="İlk adres">{{ $part['first'] }}</td>
                                 <td class="table__cell--mono" data-label="Son adres">{{ $part['last'] }}</td>
                                 <td class="table__cell--mono" data-label="Maske">{{ $part['mask'] ?? '—' }}</td>
                                 <td data-label="Ad">{{ $part['free'] ? $part['name'] : ($part['record']->name ?? '—') }}</td>
                                 <td data-label="Durum"><x-ui.badge :variant="$part['badge']">{{ $part['stateLabel'] }}</x-ui.badge></td>
+                                <td class="table__cell--tight">
+                                    @if ($part['free'])
+                                        @if ($block['canSplit'])
+                                            <div class="table__row-actions">
+                                                <a href="{{ route('ip-addresses.index', ['grup' => $selectedGroup?->uuid, 'kayit' => $block['record']->uuid, 'pencere' => 'bol']) }}"
+                                                   class="btn btn--sm">Böl</a>
+                                            </div>
+                                        @endif
+                                    @else
+                                        @include('ip-addresses.partials.row-actions', ['record' => $part['record'], 'canEdit' => $rowCan[$part['record']->address_group_id]['update'] ?? false, 'canSplit' => false])
+                                    @endif
+                                </td>
                             </tr>
                         @endforeach
                     </tbody>
