@@ -223,7 +223,8 @@ class Ipv4BlockPlan
         return match (true) {
             $used === 0 => ['state' => 'free', 'stateLabel' => 'Boş', 'badge' => BadgeVariant::Green],
             $used >= $space => ['state' => 'full', 'stateLabel' => 'Dolu', 'badge' => BadgeVariant::Red],
-            default => ['state' => 'partial', 'stateLabel' => '%'.$this->percent($used, $space).' dolu', 'badge' => BadgeVariant::Yellow],
+            /* Grup listesi ve bölüm başlığıyla aynı dil: boşta kalan pay (bkz. share). */
+            default => ['state' => 'partial', 'stateLabel' => '%'.$this->percent($space - $used, $space).' boşta', 'badge' => BadgeVariant::Yellow],
         };
     }
 

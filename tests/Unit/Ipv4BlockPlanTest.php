@@ -80,7 +80,7 @@ class Ipv4BlockPlanTest extends TestCase
 
         $this->assertSame('3 parça', $blok['partsLabel']);
         $this->assertSame('3 parça', $blok['note']);
-        $this->assertSame('%75 dolu', $blok['stateLabel']);
+        $this->assertSame('%25 boşta', $blok['stateLabel']);
         $this->assertSame(['Dolu', 'Dolu', 'Boş'], array_column($blok['parts'], 'stateLabel'));
     }
 

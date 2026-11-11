@@ -312,7 +312,7 @@ class GatewayPingTest extends TestCase
         $this->actingAs($this->izleyici())
             ->get(route('ip-addresses.index', ['grup' => $this->grup->uuid, 'blok' => IpAddress::query()->where('address', '198.51.100.0')->where('prefix', 24)->value('uuid')]))
             ->assertOk()
-            ->assertSeeInOrder(['198.51.100.0/24', '%50 dolu'])
+            ->assertSeeInOrder(['198.51.100.0/24', '%50 boşta'])
             ->assertSeeInOrder(['198.51.100.0/25', 'dot--green', 'Gateway yanıt veriyor', 'Kullanılıyor'])
             ->assertSeeInOrder(['198.51.100.128/25', 'dot--red', 'Gateway yanıt vermiyor · hiç yanıt yok', 'Boş'])
             ->assertSeeInOrder(['203.0.113.0/24', 'dot--green', 'Kullanılıyor'])

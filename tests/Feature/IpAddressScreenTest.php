@@ -509,7 +509,7 @@ class IpAddressScreenTest extends TestCase
         $this->actingAs($admin)->get(route('ip-addresses.index', ['bolum' => $grup->uuid]))
             ->assertOk()
             ->assertSee('data-open-key="alt:'.$alt->uuid.'"', false)
-            ->assertSeeInOrder(['2001:db8::/48', '%50 dolu', '2 parça', '2001:db8:0:1::/126', '2001:db8:0:2::/126']);
+            ->assertSeeInOrder(['2001:db8::/48', '%50 boşta', '2 parça', '2001:db8:0:1::/126', '2001:db8:0:2::/126']);
 
         /* Alt grubun kendi bölümünde başlık bölümün başlığıdır; ikinci kez yazılmaz. */
         $this->actingAs($admin)->get(route('ip-addresses.index', ['grup' => $grup->uuid, 'bolum' => $alt->uuid]))

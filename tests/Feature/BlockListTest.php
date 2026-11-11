@@ -77,7 +77,7 @@ class BlockListTest extends TestCase
             ->assertOk()
             ->assertDontSee('Blok planı')
             ->assertDontSee('Bölünmedi')
-            ->assertSeeInOrder(['198.51.100.0/24', 'musteri-a', 'Dolu', '198.51.102.0/24', 'musteri-b', '%50 dolu', '2 parça'])
+            ->assertSeeInOrder(['198.51.100.0/24', 'musteri-a', 'Dolu', '198.51.102.0/24', 'musteri-b', '%50 boşta', '2 parça'])
             ->assertSeeInOrder(['198.51.102.0/25', '198.51.102.1', '198.51.102.2', '198.51.102.126', '255.255.255.128', 'baglanti-x', 'Dolu'])
             ->assertSeeInOrder(['2 parça', 'v6-sunucu'])
             ->assertSee('class="block-node" >', false);
