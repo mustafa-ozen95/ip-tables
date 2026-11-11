@@ -248,9 +248,9 @@ class Ipv4BlockPlan
         return $total;
     }
 
-    /** Yüzde tam sayıya yuvarlanır; ama dolu olmayan blok %100, boş olmayan %0 görünmez. */
     /**
-     * Blokların boş payı: "%62 boşta"; blok yoksa null (IPv6, tek adres).
+     * Blokların boş payı: "%62 boşta", hiç boş yoksa "Dolu"; blok yoksa null
+     * (IPv6, tek adres).
      *
      * @param  iterable<array<string, mixed>>  $blocks  build()['blocks']
      */
@@ -264,9 +264,14 @@ class Ipv4BlockPlan
             $used += $block['used'];
         }
 
-        return $space === 0 ? null : '%'.$this->percent($space - $used, $space).' boşta';
+        return match (true) {
+            $space === 0 => null,
+            $used >= $space => 'Dolu',
+            default => '%'.$this->percent($space - $used, $space).' boşta',
+        };
     }
 
+    /** Yüzde tam sayıya yuvarlanır; ama dolu olmayan blok %100, boş olmayan %0 görünmez. */
     private function percent(int $used, int $space): int
     {
         $percent = (int) round($used * 100 / $space);

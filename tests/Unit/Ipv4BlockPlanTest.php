@@ -160,4 +160,15 @@ class Ipv4BlockPlanTest extends TestCase
 
         $this->assertSame([true, false], array_column($plan['blocks'], 'open'));
     }
+
+    /** Boş pay: hiç boş adres kalmadıysa "%0 boşta" değil "Dolu". */
+    #[Test]
+    public function bos_pay_tamamen_doluysa_dolu_yazar(): void
+    {
+        $plan = new Ipv4BlockPlan;
+
+        $this->assertSame('Dolu', $plan->freeLabel($plan->build($this->kayitlar('192.0.2.0/24', '198.51.100.0/24'))['blocks']));
+        $this->assertSame('%50 boşta', $plan->freeLabel($plan->build($this->kayitlar('192.0.2.0/24', '192.0.2.0/25'))['blocks']));
+        $this->assertNull($plan->freeLabel([]));
+    }
 }
