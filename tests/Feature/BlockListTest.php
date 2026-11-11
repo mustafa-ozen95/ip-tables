@@ -350,8 +350,19 @@ class BlockListTest extends TestCase
         $parca->update(['description' => 'uzun bir açıklama metni sonuna kadar okunur']);
 
         $this->liste($this->kullanici())
-            ->assertSee('%50 boşta · 4', false)
+            ->assertSee('<span class="">%50 boşta</span> · 4', false)
             ->assertSee('<div class="text-sm text-muted part-note">uzun bir açıklama metni sonuna kadar okunur</div>', false)
             ->assertDontSee('address-row__description text-sm text-muted truncate', false);
+    }
+
+    /** Hiç boş adres kalmayan grup "Dolu" yazar, kırmızı. */
+    #[Test]
+    public function dolu_grup_kirmizi_dolu_yazar(): void
+    {
+        $this->adres('192.0.2.0/24', 'dolu-blok');
+
+        $this->liste($this->kullanici())
+            ->assertSee('<span class="free-share--full">Dolu</span> · 1', false)
+            ->assertDontSee('%0 boşta');
     }
 }

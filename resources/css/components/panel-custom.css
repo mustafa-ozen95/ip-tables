@@ -265,3 +265,11 @@
 .sort-toggle--active {
     color: var(--color-blue-fg);
 }
+
+/*
+ * BOŞ PAY: grup listesinde ve alt grup başlığında "Dolu" kırmızı yazar;
+ * renk Dolu rozetinin yazı rengidir (badge--red).
+ */
+.free-share--full {
+    color: var(--color-red-fg);
+}

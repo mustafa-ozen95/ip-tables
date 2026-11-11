@@ -73,10 +73,10 @@ class IpAddressListing
 
     /**
      * Grup listesindeki boş pay: grubun /24 bloklarında boşta kalan adres
-     * (bkz. Ipv4BlockPlan::freeLabel). Yalnız görülebilen kayıtlardan.
+     * (bkz. Ipv4BlockPlan::freeShare). Yalnız görülebilen kayıtlardan.
      *
      * @param  Collection<int, AddressGroup>  $groups
-     * @return array{groupFree: array<string, string>, allFree: string|null} grup uuid'i => etiket
+     * @return array{groupFree: array<string, array{label: string, full: bool}>, allFree: array{label: string, full: bool}|null} grup uuid'i => boş pay
      */
     private function freeLabels(User $user, Collection $groups): array
     {
@@ -86,8 +86,8 @@ class IpAddressListing
 
         return [
             'groupFree' => $blocks->groupBy(fn (array $b): string => (string) $uuids->get($b['record']->address_group_id))
-                ->map(fn ($groupBlocks): ?string => $this->plan->freeLabel($groupBlocks))->filter()->all(),
-            'allFree' => $this->plan->freeLabel($blocks),
+                ->map(fn ($groupBlocks): ?array => $this->plan->freeShare($groupBlocks))->filter()->all(),
+            'allFree' => $this->plan->freeShare($blocks),
         ];
     }
 
@@ -99,7 +99,7 @@ class IpAddressListing
      * Alt grup bölümü katlanır, kapalı gelir; seçili kayıt ya da açılacak
      * blok içindeyse açık gelir.
      *
-     * @return array<int, array{title: string|null, summary: string|null, open: bool, blocks: list<array<string, mixed>>, rows: Collection<int, IpAddress>}>
+     * @return array<int, array{title: string|null, summary: string|null, free: array{label: string, full: bool}|null, open: bool, blocks: list<array<string, mixed>>, rows: Collection<int, IpAddress>}>
      */
     private function sections(User $user, ?AddressGroup $group, string $query, ?string $openBlock, ?string $selected, ?string $sort): array
     {
@@ -111,7 +111,7 @@ class IpAddressListing
             ->get();
 
         if ($query !== '') {
-            return [['title' => null, 'summary' => null, 'open' => true, 'blocks' => [], 'rows' => $records]];
+            return [['title' => null, 'summary' => null, 'free' => null, 'open' => true, 'blocks' => [], 'rows' => $records]];
         }
 
         $plan = $this->plan->build($records, $openBlock, $selected);
@@ -119,7 +119,7 @@ class IpAddressListing
         $rows = new Collection($plan['others']);
 
         if ($group === null || $group->subGroups->isEmpty()) {
-            return [['title' => null, 'summary' => null, 'open' => true, 'blocks' => $plan['blocks'], 'rows' => $rows]];
+            return [['title' => null, 'summary' => null, 'free' => null, 'open' => true, 'blocks' => $plan['blocks'], 'rows' => $rows]];
         }
 
         $blocksBy = collect($plan['blocks'])->groupBy(fn (array $b): string => (string) $b['record']->sub_group_id);
@@ -133,8 +133,8 @@ class IpAddressListing
                 'summary' => implode(' · ', array_filter([
                     $blocks->isNotEmpty() ? $blocks->count().' blok' : null,
                     $rows->isNotEmpty() ? $rows->count().' adres' : null,
-                    $this->plan->freeLabel($blocks),
                 ])),
+                'free' => $this->plan->freeShare($blocks),
                 'open' => $blocks->contains(fn (array $b): bool => $b['open'] || $b['record']->uuid === $selected)
                     || $rows->contains(fn (IpAddress $r): bool => $r->uuid === $selected),
                 'blocks' => $blocks->all(),
@@ -146,7 +146,7 @@ class IpAddressListing
         $sections[] = $section('Alt grupsuz', '');
 
         return array_values(array_filter($sections, fn (array $s): bool => $s['blocks'] !== [] || $s['rows']->isNotEmpty()))
-            ?: [['title' => null, 'summary' => null, 'open' => true, 'blocks' => [], 'rows' => new Collection]];
+            ?: [['title' => null, 'summary' => null, 'free' => null, 'open' => true, 'blocks' => [], 'rows' => new Collection]];
     }
 
     /**

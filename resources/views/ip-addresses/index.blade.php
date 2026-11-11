@@ -13,7 +13,7 @@
                        class="row-item"
                        @if ($selectedGroup === null) aria-selected="true" @endif>
                         <span class="row-item__label">Hepsi</span>
-                        <span class="row-item__meta">@if ($allFree){{ $allFree }} · @endif{{ $allCount }}</span>
+                        <span class="row-item__meta">@if ($allFree)@include('ip-addresses.partials.free-share', ['share' => $allFree]) · @endif{{ $allCount }}</span>
                     </a>
                 @endif
 
@@ -22,7 +22,7 @@
                        class="row-item"
                        @if ($selectedGroup?->is($group)) aria-selected="true" @endif>
                         <span class="row-item__label">{{ $group->name }}</span>
-                        <span class="row-item__meta">@isset($groupFree[$group->uuid]){{ $groupFree[$group->uuid] }} · @endisset{{ $group->ip_addresses_count }}</span>
+                        <span class="row-item__meta">@isset($groupFree[$group->uuid])@include('ip-addresses.partials.free-share', ['share' => $groupFree[$group->uuid]]) · @endisset{{ $group->ip_addresses_count }}</span>
                     </a>
                 @empty
                     <x-ui.empty title="Grup yok" text="Size henüz bir grup yetkisi verilmemiş." />

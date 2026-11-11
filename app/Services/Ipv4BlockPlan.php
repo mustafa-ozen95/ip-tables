@@ -249,12 +249,13 @@ class Ipv4BlockPlan
     }
 
     /**
-     * Blokların boş payı: "%62 boşta", hiç boş yoksa "Dolu"; blok yoksa null
-     * (IPv6, tek adres).
+     * Blokların boş payı: "%62 boşta", hiç boş yoksa "Dolu" (kırmızı yazar,
+     * full); blok yoksa null (IPv6, tek adres).
      *
      * @param  iterable<array<string, mixed>>  $blocks  build()['blocks']
+     * @return array{label: string, full: bool}|null
      */
-    public function freeLabel(iterable $blocks): ?string
+    public function freeShare(iterable $blocks): ?array
     {
         $space = 0;
         $used = 0;
@@ -266,8 +267,8 @@ class Ipv4BlockPlan
 
         return match (true) {
             $space === 0 => null,
-            $used >= $space => 'Dolu',
-            default => '%'.$this->percent($space - $used, $space).' boşta',
+            $used >= $space => ['label' => 'Dolu', 'full' => true],
+            default => ['label' => '%'.$this->percent($space - $used, $space).' boşta', 'full' => false],
         };
     }
 
