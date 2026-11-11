@@ -14,7 +14,7 @@
         <span class="address-row__address mono truncate">{{ $row->notation }}</span>
 
         <span class="address-row__name truncate">
-            {{ $row->name ?? '—' }}
+            @include('ip-addresses.partials.record-name', ['record' => $row])
             @if ($selectedGroup === null)
                 <span class="text-sm text-muted">· {{ $row->location }}</span>
             @endif

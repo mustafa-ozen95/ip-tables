@@ -44,7 +44,7 @@
                                 <td class="table__cell--mono table__cell--tight" data-label="İlk adres">{{ $part['first'] }}</td>
                                 <td class="table__cell--mono table__cell--tight" data-label="Son adres">{{ $part['last'] }}</td>
                                 <td class="table__cell--mono table__cell--tight" data-label="Maske">{{ $part['mask'] ?? '—' }}</td>
-                                <td data-label="Ad">{{ $part['free'] ? $part['name'] : ($part['record']->name ?? '—') }}</td>
+                                <td data-label="Ad">@if ($part['free']){{ $part['name'] }}@else @include('ip-addresses.partials.record-name', ['record' => $part['record']])@endif</td>
                                 <td class="table__cell--tight" data-label="Durum"><x-ui.badge :variant="$part['badge']">{{ $part['stateLabel'] }}</x-ui.badge></td>
                                 <td class="table__cell--tight table__cell--right">
                                     @unless ($part['free'])

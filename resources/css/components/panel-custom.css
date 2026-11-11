@@ -196,3 +196,15 @@
         opacity: 0.4;
     }
 }
+
+/*
+ * VURGU: kaydın adı seçilen renkte ve kalın (bkz. App\Enums\Highlight).
+ * Listede dikkat çekmesi gereken satırlar için ("… KULLANMAKTA"); renkler
+ * rozetlerin yazı renkleridir, iki temada da okunur.
+ */
+.highlight { font-weight: var(--weight-semibold); }
+.highlight--red { color: var(--color-red-fg); }
+.highlight--orange { color: var(--color-orange-fg); }
+.highlight--green { color: var(--color-green-fg); }
+.highlight--blue { color: var(--color-blue-fg); }
+.highlight--purple { color: var(--color-purple-fg); }

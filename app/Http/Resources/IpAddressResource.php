@@ -25,6 +25,7 @@ class IpAddressResource extends JsonResource
             'gosterim' => $this->notation,
             'ad' => $this->name,
             'aciklama' => $this->description,
+            'vurgu' => $this->highlight?->value,
             'tur' => $this->whenLoaded('group', fn (): string => $this->group->kind->value),
             'grup' => $this->whenLoaded('group', fn (): array => [
                 'kimlik' => $this->group->uuid,

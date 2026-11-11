@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\IpAddress;
 
+use App\Enums\Highlight;
 use App\Models\AddressGroup;
 use App\Models\IpAddress;
 use App\Models\SubGroup;
@@ -13,6 +14,7 @@ use App\Services\IpAddressParser;
 use App\Services\Ipv4BlockRules;
 use App\Services\ParsedAddress;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
 
 /**
@@ -36,7 +38,7 @@ class StoreIpAddressRequest extends FormRequest
         return $this->user()->can('create', IpAddress::class);
     }
 
-    /** @return array<string, array<int, string>> */
+    /** @return array<string, array<int, mixed>> */
     public function rules(): array
     {
         return [
@@ -45,6 +47,7 @@ class StoreIpAddressRequest extends FormRequest
             'address' => ['required', 'string', 'max:64'],
             'name' => ['nullable', 'string', 'max:120'],
             'description' => ['nullable', 'string', 'max:1000'],
+            'highlight' => ['nullable', Rule::enum(Highlight::class)],
         ];
     }
 
@@ -57,6 +60,7 @@ class StoreIpAddressRequest extends FormRequest
             'address' => 'adres',
             'name' => 'ad',
             'description' => 'açıklama',
+            'highlight' => 'vurgu rengi',
         ];
     }
 
@@ -76,7 +80,7 @@ class StoreIpAddressRequest extends FormRequest
 
     /**
      * @return array{group: AddressGroup, subGroup: SubGroup|null, parsed: ParsedAddress,
-     *               details: array{name: string|null, description: string|null}}
+     *               details: array{name: string|null, description: string|null, highlight: string|null}}
      */
     public function payload(): array
     {
@@ -87,6 +91,7 @@ class StoreIpAddressRequest extends FormRequest
             'details' => [
                 'name' => $this->validated('name'),
                 'description' => $this->validated('description'),
+                'highlight' => $this->validated('highlight') ?: null,
             ],
         ];
     }

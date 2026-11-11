@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Enums\Highlight;
 use App\Models\Concerns\HasUuid;
 use App\Models\Concerns\Searchable;
 use App\Policies\IpAddressPolicy;
@@ -28,6 +29,7 @@ use Illuminate\Support\Carbon;
  * @property int $prefix
  * @property string|null $name
  * @property string|null $description
+ * @property Highlight|null $highlight
  * @property bool|null $gateway_up
  * @property Carbon|null $gateway_checked_at
  * @property Carbon|null $gateway_seen_at
@@ -45,7 +47,7 @@ class IpAddress extends Model
      * (bkz. IpAddressWriter); formdan doğrudan yazılmaz. Grup ve alt grup
      * da yazıcı tarafından, yetkisi doğrulanmış uuid'den çözülerek verilir.
      */
-    protected $fillable = ['name', 'description'];
+    protected $fillable = ['name', 'description', 'highlight'];
 
     protected $hidden = ['id', 'sort_key', 'address_group_id', 'sub_group_id'];
 
@@ -53,6 +55,7 @@ class IpAddress extends Model
     {
         return [
             'prefix' => 'integer',
+            'highlight' => Highlight::class,
             'gateway_up' => 'boolean',
             'gateway_checked_at' => 'datetime',
             'gateway_seen_at' => 'datetime',

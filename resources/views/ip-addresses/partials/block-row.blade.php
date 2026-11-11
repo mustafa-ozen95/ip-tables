@@ -8,7 +8,7 @@
 </span>
 
 <span class="address-row__name truncate">
-    {{ $block['record']->name ?? '—' }}
+    @include('ip-addresses.partials.record-name', ['record' => $block['record']])
     @if ($selectedGroup === null)
         <span class="text-sm text-muted">· {{ $block['record']->location }}</span>
     @endif

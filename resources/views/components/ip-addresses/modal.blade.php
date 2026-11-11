@@ -52,6 +52,10 @@
                 <x-form.input name="name" :value="$record?->name" maxlength="120" />
             </x-form.field>
 
+            <x-form.field name="highlight" label="Vurgu rengi" hint="Seçilirse ad listede kalın ve bu renkte yazılır; dikkat çekmesi gerekenler için.">
+                <x-form.select name="highlight" :options="App\Enums\Highlight::options()" :selected="$record?->highlight?->value" />
+            </x-form.field>
+
             <x-form.field name="description" label="Açıklama">
                 <x-form.textarea name="description" :value="$record?->description" maxlength="1000" />
             </x-form.field>
