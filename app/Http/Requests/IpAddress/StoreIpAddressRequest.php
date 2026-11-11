@@ -27,6 +27,9 @@ use Illuminate\Validation\Validator;
  */
 class StoreIpAddressRequest extends FormRequest
 {
+    /** Ad ve açıklamanın en çok uzunluğu; formdaki maxlength de buradan. */
+    public const MAX_LENGTH = ['name' => 120, 'description' => 1000];
+
     private ?AddressGroup $group = null;
 
     private ?SubGroup $subGroup = null;
@@ -45,9 +48,23 @@ class StoreIpAddressRequest extends FormRequest
             'group' => ['required', 'string', 'uuid'],
             'sub_group' => ['nullable', 'string', 'uuid'],
             'address' => ['required', 'string', 'max:64'],
-            'name' => ['nullable', 'string', 'max:120'],
-            'description' => ['nullable', 'string', 'max:1000'],
+            ...self::detailRules(),
             'highlight' => ['nullable', Rule::enum(Highlight::class)],
+        ];
+    }
+
+    /**
+     * Ad ve açıklamanın kuralı. Listede çift tıklayarak düzenleme de aynı
+     * alanları yazar (bkz. UpdateIpAddressFieldRequest); kural orada
+     * kopyalanmaz, buradan alınır.
+     *
+     * @return array{name: list<string>, description: list<string>}
+     */
+    public static function detailRules(): array
+    {
+        return [
+            'name' => ['nullable', 'string', 'max:'.self::MAX_LENGTH['name']],
+            'description' => ['nullable', 'string', 'max:'.self::MAX_LENGTH['description']],
         ];
     }
 

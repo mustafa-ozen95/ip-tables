@@ -37,12 +37,62 @@ class IpAddressWriter
     public function update(IpAddress $ipAddress, array $payload): IpAddress
     {
         return DB::transaction(function () use ($ipAddress, $payload): IpAddress {
+            $before = $this->snapshot($ipAddress);
+
             $this->fill($ipAddress, $payload)->save();
 
-            $this->activity->record(ActivityAction::Updated, "Adres güncellendi: {$this->describe($ipAddress)}", $ipAddress);
+            $this->recordChanges($ipAddress, $before);
 
             return $ipAddress;
         });
+    }
+
+    /** Tek alan (ad ya da açıklama); listede çift tıklayarak düzenleme. */
+    public function updateField(IpAddress $ipAddress, string $field, ?string $value): void
+    {
+        DB::transaction(function () use ($ipAddress, $field, $value): void {
+            $before = $this->snapshot($ipAddress);
+
+            $ipAddress->fill([$field => $value])->save();
+
+            $this->recordChanges($ipAddress, $before);
+        });
+    }
+
+    /**
+     * Kayda neyin neye döndüğü yazılır: "… · ad: “A” → “B”". Hiçbir şey
+     * değişmediyse de satır düşer; kaydet'e basıldığı bilinsin.
+     *
+     * @param  array<string, string|null>  $before  snapshot()
+     */
+    private function recordChanges(IpAddress $ipAddress, array $before): void
+    {
+        $after = $this->snapshot($ipAddress->load(['group', 'subGroup']));
+        $quote = fn (?string $v): string => $v === null || $v === '' ? '(boş)' : "“{$v}”";
+
+        $changes = collect($after)
+            ->filter(fn (?string $value, string $label): bool => $value !== $before[$label])
+            ->map(fn (?string $value, string $label): string => "{$label}: {$quote($before[$label])} → {$quote($value)}")
+            ->implode(' · ');
+
+        $this->activity->record(
+            ActivityAction::Updated,
+            "Adres güncellendi: {$this->describe($ipAddress)}".($changes === '' ? ' (değişiklik yok)' : " · {$changes}"),
+            $ipAddress,
+        );
+    }
+
+    /** @return array<string, string|null> kayıtta adıyla görünen alanlar */
+    private function snapshot(IpAddress $ipAddress): array
+    {
+        return [
+            'adres' => $ipAddress->notation,
+            'grup' => $ipAddress->group?->name,
+            'alt grup' => $ipAddress->subGroup?->name,
+            'ad' => $ipAddress->name,
+            'açıklama' => $ipAddress->description,
+            'vurgu' => $ipAddress->highlight?->label(),
+        ];
     }
 
     public function delete(IpAddress $ipAddress, string $reason): void

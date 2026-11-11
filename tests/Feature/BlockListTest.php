@@ -80,7 +80,7 @@ class BlockListTest extends TestCase
             ->assertSeeInOrder(['198.51.100.0/24', 'musteri-a', 'Dolu', '198.51.102.0/24', 'musteri-b', '%50 dolu', '2 parça'])
             ->assertSeeInOrder(['198.51.102.0/25', '198.51.102.1', '198.51.102.2', '198.51.102.126', '255.255.255.128', 'baglanti-x', 'Dolu'])
             ->assertSeeInOrder(['2 parça', 'v6-sunucu'])
-            ->assertSee('<details class="block-node" >', false);
+            ->assertSee('class="block-node" >', false);
     }
 
     /** Seçili kayıt bir parçaysa bloğu açık gelir; bloğun kendisi seçiliyse kapalı kalır. */
@@ -92,10 +92,10 @@ class BlockListTest extends TestCase
         $this->adres('198.51.100.128/25');
 
         $this->liste($this->kullanici(), ['kayit' => $parca->uuid])
-            ->assertSee('<details class="block-node"  open >', false);
+            ->assertSee('class="block-node"  open >', false);
 
         $this->liste($this->kullanici(), ['kayit' => $blok->uuid])
-            ->assertSee('<details class="block-node" >', false);
+            ->assertSee('class="block-node" >', false);
     }
 
     /** Arama sonucu düz listedir: eşleşen parça, bloğu eşleşmese de görünür. */

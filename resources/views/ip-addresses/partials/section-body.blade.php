@@ -9,7 +9,7 @@
         <span class="address-row__address mono truncate">{{ $row->notation }}</span>
 
         <span class="address-row__name truncate">
-            @include('ip-addresses.partials.record-name', ['record' => $row])
+            <span @can('update', $row) @include('ip-addresses.partials.inline-edit-attrs', ['record' => $row, 'field' => 'name', 'value' => $row->name]) title="Düzenlemek için çift tıklayın" @endcan>@include('ip-addresses.partials.record-name', ['record' => $row])</span>
             @if ($selectedGroup === null)
                 <span class="text-sm text-muted">· {{ $row->location }}</span>
             @endif
@@ -19,7 +19,8 @@
             <x-ui.badge :variant="$row->group->kind->badge()">{{ $row->group->kind->label() }}</x-ui.badge>
         </span>
 
-        <span class="address-row__description text-sm text-muted">{{ $row->description ?? '' }}</span>
+        <span class="address-row__description text-sm text-muted"
+              @can('update', $row) @include('ip-addresses.partials.inline-edit-attrs', ['record' => $row, 'field' => 'description', 'value' => $row->description]) title="Düzenlemek için çift tıklayın" @endcan>{{ $row->description ?? '' }}</span>
 
         <span class="address-row__actions">
             @include('ip-addresses.partials.row-actions', ['record' => $row])

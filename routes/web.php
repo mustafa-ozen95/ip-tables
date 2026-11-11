@@ -15,6 +15,7 @@ use App\Http\Controllers\DatabaseController;
 use App\Http\Controllers\ErrorLogController;
 use App\Http\Controllers\GatewayPingController;
 use App\Http\Controllers\IpAddressController;
+use App\Http\Controllers\IpAddressFieldController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\SubGroupController;
@@ -92,6 +93,10 @@ Route::middleware('auth')->group(function (): void {
     /* ↻'nin dönen ikonu sonucu buradan bekler (aralıkla sorar). */
     Route::get('addresses/{ipAddress}/ping', [GatewayPingController::class, 'show'])
         ->middleware('throttle:120,1')->name('ip-addresses.ping.show');
+
+    /* Listede çift tıklayarak ad / açıklama düzenleme (bkz. inline-edit.js). */
+    Route::patch('addresses/{ipAddress}/field', [IpAddressFieldController::class, 'update'])
+        ->name('ip-addresses.field');
 
     /* Excel çıktısı; kaynağın {ipAddress} rotalarından önce, "export" bir uuid sanılmasın. */
     Route::post('addresses/export', AddressExportController::class)

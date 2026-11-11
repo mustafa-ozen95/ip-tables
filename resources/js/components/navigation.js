@@ -93,6 +93,28 @@ function restoreListScrolls(scrolls) {
     });
 }
 
+/**
+ * Elle açılmış bölüm ve bloklar — sayfa YERİNDE yeniden çizilince açık
+ * kalır (yeni gezinmede değil).
+ *
+ * Sunucu yalnızca kendi bildiği bloğu açık çizer (seçili kayıt, az önce
+ * bölünen blok). Listede çift tıklayarak bir parçanın adını değiştiren
+ * kişi kaydettiğinde bütün bloklar kapanıyor, az önce baktığı yeri
+ * yeniden açmak zorunda kalıyordu. Kaydırma bu açılıştan SONRA geri
+ * konur; önce konsaydı kısalan liste konumu kırpardı.
+ */
+function openKeys() {
+    return $$('details[open][data-open-key]').map((node) => node.dataset.openKey);
+}
+
+function reopen(keys) {
+    const wanted = new Set(keys);
+
+    $$('details[data-open-key]')
+        .filter((node) => wanted.has(node.dataset.openKey))
+        .forEach((node) => { node.open = true; });
+}
+
 function render(text, url, historyMode) {
     const fresh = new DOMParser().parseFromString(text, 'text/html');
 
@@ -128,9 +150,11 @@ function render(text, url, historyMode) {
     }
 
     const scrolls = listScrolls(document);
+    const opened = historyMode === 'push' ? [] : openKeys();
 
     document.body.innerHTML = fresh.body.innerHTML;
 
+    reopen(opened);
     restoreListScrolls(scrolls);
 
     if (historyMode === 'push') {

@@ -217,6 +217,23 @@
 .highlight--purple { color: var(--color-purple-fg); }
 
 /*
+ * YERİNDE DÜZENLEME (bkz. inline-edit.js): ada ya da açıklamaya çift
+ * tıklayınca alanın yerine açılan kutu ve ✓ ✕ düğmeleri. Kardeş
+ * panellerde listede yerinde düzenleme yok; kutu sütunu doldurur,
+ * düğmeler yanında durur.
+ */
+[data-inline-edit] { cursor: text; }
+
+.inline-edit {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    min-width: 0;
+}
+
+.inline-edit .input { flex: 1; min-width: 0; }
+
+/*
  * VURGU SEÇİMİ: açılır listede her renk kendi renginde şerittir; seçilince
  * kutunun solunda aynı renkte şerit durur. Ortak .select değişmez, yalnız
  * seçenek ve kenar rengi verilir. (macOS tarayıcıları seçenek rengini

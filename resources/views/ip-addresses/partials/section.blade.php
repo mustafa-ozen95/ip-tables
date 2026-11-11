@@ -4,7 +4,7 @@
     açık gelir (bkz. IpAddressListing::sections).
 --}}
 @if ($section['title'] !== null)
-    <details class="sub-group" @if ($section['open']) open @endif>
+    <details data-open-key="bolum:{{ $section['title'] }}" class="sub-group" @if ($section['open']) open @endif>
         <summary class="credential-section sub-group__head">
             <span class="block-node__toggle" aria-hidden="true"></span>
             <span @class(['credential-section__name', 'highlight highlight--'.$section['highlight'] => $section['highlight'] ?? null])>{{ $section['title'] }}</span>

@@ -10,7 +10,7 @@
     değişse de noktalar alt alta hizalanır.
 --}}
 @if ($block['parts'] !== [])
-    <details class="block-node" @if ($block['open']) open @endif>
+    <details data-open-key="{{ $block['record']->uuid }}" class="block-node" @if ($block['open']) open @endif>
         <summary class="grid-row address-row"
                  @if ($selected && $selected['uuid'] === $block['record']->uuid) aria-selected="true" @endif>
             @include('ip-addresses.partials.block-row')
@@ -44,12 +44,11 @@
                                 <td class="table__cell--mono table__cell--tight" data-label="İlk adres">{{ $part['first'] }}</td>
                                 <td class="table__cell--mono table__cell--tight" data-label="Son adres">{{ $part['last'] }}</td>
                                 <td class="table__cell--mono table__cell--tight" data-label="Maske">{{ $part['mask'] ?? '—' }}</td>
-                                <td data-label="Ad">
-                                    @if ($part['free']){{ $part['name'] }}@else @include('ip-addresses.partials.record-name', ['record' => $part['record']])@endif
-                                    @if (! $part['free'] && $part['record']->description)
-                                        <div class="text-sm text-muted part-note">{{ $part['record']->description }}</div>
-                                    @endif
-                                </td>
+                                @if ($part['free'])
+                                    <td data-label="Ad">{{ $part['name'] }}</td>
+                                @else
+                                    @include('ip-addresses.partials.part-name', ['record' => $part['record']])
+                                @endif
                                 <td class="table__cell--tight" data-label="Durum"><x-ui.badge :variant="$part['badge']">{{ $part['stateLabel'] }}</x-ui.badge></td>
                                 <td class="table__cell--tight table__cell--right">
                                     @unless ($part['free'])

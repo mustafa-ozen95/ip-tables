@@ -3,6 +3,7 @@ import * as confirmDialog from './components/confirm.js';
 import * as copy from './components/copy.js';
 import * as dialog from './components/dialog.js';
 import * as gatewayPing from './components/gateway-ping.js';
+import * as inlineEdit from './components/inline-edit.js';
 import * as keyboard from './components/keyboard.js';
 import * as liveSearch from './components/live-search.js';
 import * as conditionalField from './components/conditional-field.js';
@@ -53,6 +54,7 @@ document.addEventListener('DOMContentLoaded', () => {
     copy.init();
     ordering.init();
     gatewayPing.init();
+    inlineEdit.init();
     keyboard.init();
     liveSearch.init();
     userMenu.init();
