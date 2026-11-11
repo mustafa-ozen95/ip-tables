@@ -217,6 +217,23 @@
 .highlight--purple { color: var(--color-purple-fg); }
 
 /*
+ * VURGU SEÇİMİ: açılır listede her renk kendi renginde şerittir; seçilince
+ * kutunun solunda aynı renkte şerit durur. Ortak .select değişmez, yalnız
+ * seçenek ve kenar rengi verilir. (macOS tarayıcıları seçenek rengini
+ * göstermez; orada yazı ve kutudaki şerit kalır.)
+ */
+.highlight-select option[value='red'] { background: var(--color-red-fg); color: var(--color-text-inverse); }
+.highlight-select option[value='orange'] { background: var(--color-orange-fg); color: var(--color-text-inverse); }
+.highlight-select option[value='green'] { background: var(--color-green-fg); color: var(--color-text-inverse); }
+.highlight-select option[value='blue'] { background: var(--color-blue-fg); color: var(--color-text-inverse); }
+.highlight-select option[value='purple'] { background: var(--color-purple-fg); color: var(--color-text-inverse); }
+.highlight-select:has(option[value='red']:checked) { border-left: 4px solid var(--color-red-fg); }
+.highlight-select:has(option[value='orange']:checked) { border-left: 4px solid var(--color-orange-fg); }
+.highlight-select:has(option[value='green']:checked) { border-left: 4px solid var(--color-green-fg); }
+.highlight-select:has(option[value='blue']:checked) { border-left: 4px solid var(--color-blue-fg); }
+.highlight-select:has(option[value='purple']:checked) { border-left: 4px solid var(--color-purple-fg); }
+
+/*
  * ALT GRUP: bölüm başlığı katlanır (<details>, betiksiz), kapalı gelir.
  * Ok ve dönüşü blok satırınınkidir (block-node__toggle); başlıkta blok
  * sayısı ve boş pay sağa yaslanır. Sütun başlığının hemen altındaki ilk
