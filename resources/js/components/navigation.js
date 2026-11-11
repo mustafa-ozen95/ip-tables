@@ -229,6 +229,38 @@ export async function submitForm(form) {
     }
 }
 
+/** GET formunun varacağı adres; başka bir köke gidiyorsa null. */
+function getTarget(form) {
+    const url = new URL(form.getAttribute('action') || window.location.href, window.location.href);
+
+    if (! sameOrigin(url)) {
+        return null;
+    }
+
+    url.search = new URLSearchParams(new FormData(form)).toString();
+
+    return url.href;
+}
+
+/**
+ * Arama formunu yazarken gönderir (bkz. live-search.js).
+ *
+ * Gönder düğmesinden farkı geçmiş: her harf geçmişe satır ekleseydi "geri"
+ * tuşu aramayı harf harf silerdi. Adres yerinde güncellenir; F5 aynı
+ * süzgeci açar. Önceki istek bitmemişse goTo onu iptal eder.
+ */
+export function searchAsTyped(form) {
+    const url = getTarget(form);
+
+    if (url === null) {
+        form.requestSubmit();
+
+        return;
+    }
+
+    goTo(url, 'replace');
+}
+
 /**
  * Bulunulan sayfayı YERİNDE tazeler.
  *
@@ -271,16 +303,14 @@ export function init() {
             return;
         }
 
-        const url = new URL(form.getAttribute('action') || window.location.href, window.location.href);
+        const url = getTarget(form);
 
-        if (! sameOrigin(url)) {
+        if (url === null) {
             return;
         }
 
-        url.search = new URLSearchParams(new FormData(form)).toString();
-
         event.preventDefault();
-        goTo(url.href);
+        goTo(url);
     });
 
     /* Geri/ileri: adres zaten değişti, yalnızca içerik getirilir. */

@@ -4,6 +4,7 @@ import * as copy from './components/copy.js';
 import * as dialog from './components/dialog.js';
 import * as gatewayPing from './components/gateway-ping.js';
 import * as keyboard from './components/keyboard.js';
+import * as liveSearch from './components/live-search.js';
 import * as conditionalField from './components/conditional-field.js';
 import * as userMenu from './components/user-menu.js';
 import * as navigation from './components/navigation.js';
@@ -41,6 +42,9 @@ function everyRender() {
 
     /* Kayıt formundaki koşullu alanlar da her çizimde yeni gelen formda. */
     conditionalField.init();
+
+    /* Canlı aramada yeniden çizilen kutuya odak ve imleç (bkz. live-search.js). */
+    liveSearch.restore();
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -50,6 +54,7 @@ document.addEventListener('DOMContentLoaded', () => {
     ordering.init();
     gatewayPing.init();
     keyboard.init();
+    liveSearch.init();
     userMenu.init();
     navigation.init();
     /* Ekran kilidi: hareketsiz sekme oturumu kapatır (bkz. session-lock.js). Bir kez. */

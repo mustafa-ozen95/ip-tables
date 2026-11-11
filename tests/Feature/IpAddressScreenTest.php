@@ -13,6 +13,7 @@ use App\Models\User;
 use App\Models\UserPermission;
 use App\Policies\IpAddressPolicy;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Schema;
 use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
 
@@ -465,5 +466,14 @@ class IpAddressScreenTest extends TestCase
             ->assertSessionHasNoErrors();
 
         $this->assertSame(['192.0.2.0', 'yeni-ad'], [$blok->fresh()->address, $blok->fresh()->name]);
+    }
+
+    /** Arama yazdıkça istek atar; her istek kayıtları liste sırasıyla çeker. */
+    #[Test]
+    public function liste_sirasi_dizinlidir(): void
+    {
+        $dizinler = array_column(Schema::getIndexes('ip_addresses'), 'columns');
+
+        $this->assertContains(['sort_key', 'prefix'], $dizinler);
     }
 }
