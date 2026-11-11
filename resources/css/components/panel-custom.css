@@ -44,6 +44,13 @@
     }
 
     .address-row.grid-row__head { display: none; }
+
+    /*
+     * Sağ sütun satırın en geniş rozeti kadardır ("%50 dolu" "Dolu"dan
+     * geniş); rozet ve ⋮ sağa yaslanır ki satırdan satıra kaymasın.
+     */
+    .address-row__type,
+    .address-row__actions { justify-self: end; }
 }
 
 /*
@@ -276,4 +283,17 @@
 
 .free-share--full {
     color: var(--color-red-fg);
+}
+
+/*
+ * TELEFONDA YAZISIZ PENCERE ORTADA: ortak modal.css telefonda pencereyi
+ * klavye yazı alanını örtmesin diye üstten açar. Bu panelde işlemler (⋮),
+ * Böl ve bilgi pencereleri çok açılır ve yazı alanı yoktur; onlar ortada
+ * açılır. Yazı alanı olan pencere (Ekle, Düzenle, onay) üstte kalır.
+ */
+@media (max-width: 480px) {
+    .modal:not(:has(input:not([type='hidden'], [type='checkbox'], [type='radio']), textarea)) {
+        align-items: center;
+        padding-bottom: var(--space-2);
+    }
 }
