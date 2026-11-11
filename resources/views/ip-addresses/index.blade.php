@@ -84,6 +84,9 @@
         </div>
     </div>
 
+    {{-- Ad kutularının önerileri; boş gelir, ad kutusu açılınca doldurulur (bkz. name-complete.js). --}}
+    <datalist id="name-suggestions" data-source="{{ route('ip-addresses.names') }}"></datalist>
+
     {{-- Aynı anda tek pencere: biri doğrulama hatasıyla açıksa diğeri çizilmez. --}}
     @if ($canCreate && ! in_array($window, ['duzenle', 'bol'], true))
         <x-ip-addresses.modal id="record-add"

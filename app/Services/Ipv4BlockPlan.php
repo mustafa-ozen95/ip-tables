@@ -274,6 +274,33 @@ class Ipv4BlockPlan
             $used += $block['used'];
         }
 
+        return $this->share($used, $space);
+    }
+
+    /**
+     * IPv6 kayıtlarının boş payı. Adres alanı sayılamaz (tek /64 bile 2^64
+     * adres); IPv4 bloğundaki parça gibi KAYIT sayılır: adı olmayan ve
+     * gateway'i yanıt vermeyen kayıt boştadır. Kayıt yoksa null.
+     *
+     * @param  iterable<IpAddress>  $records
+     * @return array{label: string, full: bool}|null
+     */
+    public function recordShare(iterable $records): ?array
+    {
+        $space = 0;
+        $used = 0;
+
+        foreach ($records as $record) {
+            $space++;
+            $used += $this->inUse($record) ? 1 : 0;
+        }
+
+        return $this->share($used, $space);
+    }
+
+    /** @return array{label: string, full: bool}|null */
+    private function share(int $used, int $space): ?array
+    {
         return match (true) {
             $space === 0 => null,
             $used >= $space => ['label' => 'Dolu', 'full' => true],

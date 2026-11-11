@@ -49,7 +49,7 @@
             </x-form.field>
 
             <x-form.field name="name" label="Ad" hint="Cihaz, sunucu ya da hizmetin adı.">
-                <x-form.input name="name" :value="$record?->name" maxlength="120" />
+                <x-form.input name="name" :value="$record?->name" maxlength="120" list="name-suggestions" autocomplete="off" />
             </x-form.field>
 
             <x-form.field name="highlight" label="Vurgu rengi" hint="Seçilirse ad listede kalın ve bu renkte yazılır; dikkat çekmesi gerekenler için.">

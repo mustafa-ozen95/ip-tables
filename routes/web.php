@@ -6,6 +6,7 @@ use App\Http\Controllers\Account\ProfileController;
 use App\Http\Controllers\ActivityLogController;
 use App\Http\Controllers\AddressExportController;
 use App\Http\Controllers\AddressGroupController;
+use App\Http\Controllers\AddressNameController;
 use App\Http\Controllers\AddressSplitController;
 use App\Http\Controllers\ApiTokenController;
 use App\Http\Controllers\Auth\CenterLoginController;
@@ -97,6 +98,9 @@ Route::middleware('auth')->group(function (): void {
     /* Listede çift tıklayarak ad / açıklama düzenleme (bkz. inline-edit.js). */
     Route::patch('addresses/{ipAddress}/field', [IpAddressFieldController::class, 'update'])
         ->name('ip-addresses.field');
+
+    /* Ad kutusunun önerileri (bkz. name-complete.js). */
+    Route::get('addresses/names', AddressNameController::class)->name('ip-addresses.names');
 
     /* Excel çıktısı; kaynağın {ipAddress} rotalarından önce, "export" bir uuid sanılmasın. */
     Route::post('addresses/export', AddressExportController::class)

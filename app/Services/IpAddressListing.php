@@ -66,7 +66,7 @@ class IpAddressListing
         return [
             'groups' => $groups,
             'allCount' => $groups->sum('ip_addresses_count'),
-            ...$this->freeLabels($groups, $plan['blocks']),
+            ...$this->freeLabels($groups, $plan),
             'selectedGroup' => $selectedGroup,
             'query' => $query,
             'sections' => $this->sections($user, $plan, $groups, $selectedGroup, $query, $selected['uuid'] ?? null, $sort, $this->openSections($request)),
@@ -82,23 +82,45 @@ class IpAddressListing
     }
 
     /**
+     * Ad kutusunun önerileri: kullanıcının görebildiği kayıtların farklı
+     * adları (bkz. AddressNameController). Görülemeyen grubun adı önerilmez.
+     *
+     * @return list<string>
+     */
+    public function nameSuggestions(User $user): array
+    {
+        return IpAddress::query()->visibleTo($user)->whereNotNull('name')->where('name', '!=', '')
+            ->distinct()->orderBy('name')->pluck('name')->all();
+    }
+
+    /**
      * Grup listesindeki boş pay: grubun /24 bloklarında boşta kalan adres
-     * (bkz. Ipv4BlockPlan::freeShare). Yalnız görülebilen kayıtlardan.
+     * (bkz. Ipv4BlockPlan::freeShare); bloğu olmayan IPv6 grubunda boştaki
+     * kayıt (recordShare). "Hepsi" yalnız IPv4 adres alanıdır: kayıt ile
+     * adres aynı terazide tartılmaz. Yalnız görülebilen kayıtlardan.
      *
      * @param  Collection<int, AddressGroup>  $groups
-     * @param  list<array<string, mixed>>  $blocks  Ipv4BlockPlan::build()['blocks']
+     * @param  array{blocks: list<array<string, mixed>>, others: list<IpAddress>}  $plan  Ipv4BlockPlan::build()
      * @return array{groupFree: array<string, array{label: string, full: bool}>, allFree: array{label: string, full: bool}|null} grup uuid'i => boş pay
      */
-    private function freeLabels(Collection $groups, array $blocks): array
+    private function freeLabels(Collection $groups, array $plan): array
     {
         /* Sıralı anahtar sayfaya çıkmaz: grup uuid'ine çevrilir. */
         $uuids = $groups->pluck('uuid', 'id');
+        $blocks = collect($plan['blocks'])->groupBy(fn (array $b): string => (string) $uuids->get($b['record']->address_group_id));
+        $ipv6 = collect($plan['others'])->filter($this->isIpv6(...))->groupBy(fn (IpAddress $r): string => (string) $uuids->get($r->address_group_id));
 
         return [
-            'groupFree' => collect($blocks)->groupBy(fn (array $b): string => (string) $uuids->get($b['record']->address_group_id))
-                ->map(fn ($groupBlocks): ?array => $this->plan->freeShare($groupBlocks))->filter()->all(),
-            'allFree' => $this->plan->freeShare($blocks),
+            'groupFree' => $uuids->values()->mapWithKeys(fn (string $uuid): array => [
+                $uuid => $this->plan->freeShare($blocks->get($uuid, [])) ?? $this->plan->recordShare($ipv6->get($uuid, [])),
+            ])->filter()->all(),
+            'allFree' => $this->plan->freeShare($plan['blocks']),
         ];
+    }
+
+    private function isIpv6(IpAddress $record): bool
+    {
+        return str_contains($record->address, ':');
     }
 
     /**
@@ -153,7 +175,7 @@ class IpAddressListing
                     $blocks->isNotEmpty() ? $blocks->count().' blok' : null,
                     $rows->isNotEmpty() ? $rows->count().' adres' : null,
                 ])),
-                'free' => $this->plan->freeShare($blocks),
+                'free' => $this->plan->freeShare($blocks) ?? $this->plan->recordShare($rows->filter($this->isIpv6(...))),
                 'open' => in_array($openKey, $openSections, true)
                     || $blocks->contains(fn (array $b): bool => $b['open'] || $b['record']->uuid === $selected)
                     || $rows->contains(fn (IpAddress $r): bool => $r->uuid === $selected),
@@ -192,7 +214,7 @@ class IpAddressListing
      */
     private function tabled(Collection $rows, bool $headed = true, ?string $selected = null): array
     {
-        [$ipv6, $rest] = $rows->partition(fn (IpAddress $r): bool => str_contains($r->address, ':'));
+        [$ipv6, $rest] = $rows->partition($this->isIpv6(...));
         $bySub = $headed ? $ipv6->groupBy(fn (IpAddress $r): string => (string) $r->sub_group_id) : collect([$ipv6]);
 
         return ['rows' => $rest->values(), 'table' => $bySub->map(fn (Collection $records): array => [

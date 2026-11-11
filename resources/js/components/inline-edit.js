@@ -79,6 +79,12 @@ function open(field) {
     input.maxLength = Number(field.dataset.inlineMax) || 1000;
     input.setAttribute('aria-label', label);
 
+    /* Adda mevcut adlar önerilir (bkz. name-complete.js). */
+    if (field.dataset.inlineEdit === 'name') {
+        input.setAttribute('list', 'name-suggestions');
+        input.autocomplete = 'off';
+    }
+
     form.append(
         hidden('_token', $('meta[name="csrf-token"]')?.content ?? ''),
         hidden('_method', 'PATCH'),

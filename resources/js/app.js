@@ -7,6 +7,7 @@ import * as inlineEdit from './components/inline-edit.js';
 import * as keyboard from './components/keyboard.js';
 import * as lazySection from './components/lazy-section.js';
 import * as liveSearch from './components/live-search.js';
+import * as nameComplete from './components/name-complete.js';
 import * as conditionalField from './components/conditional-field.js';
 import * as userMenu from './components/user-menu.js';
 import * as navigation from './components/navigation.js';
@@ -59,6 +60,7 @@ document.addEventListener('DOMContentLoaded', () => {
     keyboard.init();
     lazySection.init();
     liveSearch.init();
+    nameComplete.init();
     userMenu.init();
     navigation.init();
     /* Ekran kilidi: hareketsiz sekme oturumu kapatır (bkz. session-lock.js). Bir kez. */

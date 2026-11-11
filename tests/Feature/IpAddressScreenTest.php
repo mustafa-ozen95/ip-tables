@@ -517,4 +517,48 @@ class IpAddressScreenTest extends TestCase
             ->assertDontSee('data-open-key="alt:', false)
             ->assertSee('2001:db8:0:2::/126');
     }
+
+    /** Ad önerileri yalnız görülebilen kayıtların adlarıdır; başka grubun adı sızmaz, sayfaya gömülmez. */
+    #[Test]
+    public function ad_onerileri_gorulebilen_adlardan_gelir(): void
+    {
+        $acik = $this->grup('Grup A');
+        $kapali = $this->grup('Grup B');
+        $this->adres($acik, '192.0.2.10', 'ortak-sunucu');
+        $this->adres($acik, '192.0.2.11', 'ortak-sunucu');
+        $this->adres($acik, '192.0.2.12', 'b-sunucu');
+        $this->adres($acik, '192.0.2.13');
+        $this->adres($kapali, '203.0.113.5', 'gizli-sunucu');
+        $kullanici = $this->kullanici($acik, ['view']);
+
+        $this->actingAs($kullanici)->getJson(route('ip-addresses.names'))
+            ->assertOk()
+            ->assertExactJson(['b-sunucu', 'ortak-sunucu']);
+
+        $this->actingAs($kullanici)->get(route('ip-addresses.index', ['q' => 'b-sunucu']))
+            ->assertSee('data-source="'.route('ip-addresses.names').'"', false)
+            ->assertDontSee('ortak-sunucu');
+    }
+
+    #[Test]
+    public function ad_onerileri_yetkisiz_alinamaz(): void
+    {
+        $this->getJson(route('ip-addresses.names'))->assertUnauthorized();
+        $this->actingAs(User::factory()->create())->getJson(route('ip-addresses.names'))->assertForbidden();
+    }
+
+    /** IPv6 grubunun boş payı IPv4 gibi yazar; adres değil kayıt sayılır. */
+    #[Test]
+    public function ipv6_grubunda_bos_pay_kayittan_yazar(): void
+    {
+        $grup = $this->grup('Grup V6', GroupKind::Ipv6);
+        foreach (range(1, 4) as $i) {
+            $this->adres($grup, "2001:db8:0:{$i}::/64", $i === 1 ? 'Müşteri' : null);
+        }
+
+        $this->actingAs(User::factory()->admin()->create())
+            ->get(route('ip-addresses.index'))
+            ->assertOk()
+            ->assertSeeInOrder(['Grup V6', '%75 boşta', '4'], false);
+    }
 }
