@@ -88,6 +88,9 @@ Route::middleware('auth')->group(function (): void {
     /* ↻ gateway'i şimdi pingle: dışarıya paket çıkar, sıklığı sınırlı. */
     Route::post('addresses/{ipAddress}/ping', [GatewayPingController::class, 'store'])
         ->middleware('throttle:30,1')->name('ip-addresses.ping');
+    /* ↻'nin dönen ikonu sonucu buradan bekler (aralıkla sorar). */
+    Route::get('addresses/{ipAddress}/ping', [GatewayPingController::class, 'show'])
+        ->middleware('throttle:120,1')->name('ip-addresses.ping.show');
 
     Route::resource('addresses', IpAddressController::class)
         ->only(['index', 'store', 'update', 'destroy'])

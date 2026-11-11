@@ -155,3 +155,27 @@
     display: inline-flex;
     margin-left: var(--space-1);
 }
+
+/* Sonuç beklenirken ↻ döner (aria-busy, bkz. gateway-ping.js). */
+.ping-now__icon {
+    display: inline-block;
+}
+
+.ping-now [aria-busy='true'] {
+    cursor: progress;
+}
+
+.ping-now [aria-busy='true'] .ping-now__icon {
+    animation: ping-now-spin 0.9s linear infinite;
+}
+
+@keyframes ping-now-spin {
+    to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ping-now [aria-busy='true'] .ping-now__icon {
+        animation: none;
+        opacity: 0.4;
+    }
+}

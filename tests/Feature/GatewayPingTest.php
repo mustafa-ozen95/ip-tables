@@ -222,6 +222,29 @@ class GatewayPingTest extends TestCase
         Queue::assertPushed(PingGatewayJob::class, fn (PingGatewayJob $is): bool => $is->recordId === $blok->id && $is->gateway === '198.51.100.1');
     }
 
+    /** Betik: JSON ile atar, sonucu ayrı uçtan bekler; o uç da "ping" yetkisi ister. */
+    #[Test]
+    public function betik_sonucu_bekler(): void
+    {
+        $blok = $this->adres('198.51.100.0/24');
+        $pingci = $this->izleyici(['ping']);
+
+        $this->actingAs($this->izleyici())->getJson(route('ip-addresses.ping.show', $blok))->assertForbidden();
+        $this->actingAs($pingci)->getJson(route('ip-addresses.ping.show', $blok))
+            ->assertExactJson(['checkedAt' => null, 'variant' => null, 'label' => null]);
+
+        Process::fake(fn () => Process::result(exitCode: 0));
+        $this->actingAs($pingci)->postJson(route('ip-addresses.ping', $blok))
+            ->assertOk()->assertJson(['checkedAt' => null]);
+
+        $this->actingAs($pingci)->getJson(route('ip-addresses.ping.show', $blok))
+            ->assertJson(['variant' => 'green'])
+            ->assertJsonPath('checkedAt', $blok->refresh()->gateway_checked_at->toIso8601String());
+
+        $this->actingAs($pingci)->postJson(route('ip-addresses.ping', $this->adres('198.51.100.7')))
+            ->assertStatus(422)->assertJson(['message' => '198.51.100.7 için pinglenecek gateway yok.']);
+    }
+
     #[Test]
     public function gatewayi_olmayana_ping_atilmaz(): void
     {
