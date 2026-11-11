@@ -283,10 +283,19 @@ class IpAddressListing
      */
     private function sortLink(?string $sort, ?AddressGroup $group, string $query): array
     {
-        $next = ['bos' => 'dolu', 'dolu' => null][$sort] ?? 'bos';
+        /* Dizi indeksi null olamaz (PHP 8.5 uyarısı); sıra seçilmemişken de çalışsın. */
+        $next = match ($sort) {
+            'bos' => 'dolu',
+            'dolu' => null,
+            default => 'bos',
+        };
 
         return [
-            'icon' => ['bos' => '↑', 'dolu' => '↓'][$sort] ?? '↕',
+            'icon' => match ($sort) {
+                'bos' => '↑',
+                'dolu' => '↓',
+                default => '↕',
+            },
             'label' => match ($sort) {
                 'bos' => 'Boşlar önce; dolular önce sırala',
                 'dolu' => 'Dolular önce; adres sırasına dön',

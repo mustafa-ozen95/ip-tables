@@ -376,4 +376,14 @@ class BlockListTest extends TestCase
             ->assertSee('<span class="free-share--full">Dolu</span> · 1', false)
             ->assertDontSee('%0 boşta');
     }
+
+    #[Test]
+    public function siralama_secilmemis_liste_uyari_vermez(): void
+    {
+        $this->withoutDeprecationHandling()
+            ->actingAs(User::factory()->admin()->create())
+            ->get(route('ip-addresses.index'))
+            ->assertOk()
+            ->assertSee('↕');
+    }
 }
